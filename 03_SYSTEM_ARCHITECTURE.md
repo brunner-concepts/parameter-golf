@@ -37,6 +37,11 @@ Owns: exact measurement, step time, pre/post-quant BPB, legal TTT protocol enfor
 
 Owns: record eligibility checklist, concise PR description, logs/artifacts/plots/checksums.
 
+### 9. Run Control / Watchdog
+
+Owns: pod-local phase execution, heartbeats, durable run state, failure capture, and next-command suggestions.
+Never auto-promotes to a more expensive compute tier. Never overrides the promotion gates.
+
 ## Execution phases
 
 ### Phase 0: Bootstrap
@@ -83,3 +88,9 @@ Each agent writes a structured report after every run:
 Chief of Staff then updates: 05_HYPOTHESIS_BACKLOG.jsonl, 06_EXPERIMENT_REGISTRY.jsonl, 07_DECISION_LOG.md
 
 No agent gets to self-promote its own idea.
+
+The watchdog additionally persists:
+- `11_RUN_CONTROL/current_state.json`
+- `11_RUN_CONTROL/heartbeat.json`
+- `11_RUN_CONTROL/next_action.txt`
+- immutable per-run logs under `11_RUN_CONTROL/runs/`

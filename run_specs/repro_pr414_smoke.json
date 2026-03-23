@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "run_id": "repro_pr414_smoke",
+  "hypothesis": "Validate that PR #414 can bootstrap, fetch data, and enter the train loop on a single H100 before spending 8x H100 SXM.",
+  "parent_branch": "repro/pr414",
+  "track": "B",
+  "compute_tier": "1xH100-smoke",
+  "auto_promote": false,
+  "promotion_gate": "Smoke must complete cleanly before launching the 8x H100 SXM reproduction spec.",
+  "env": {
+    "REPO_URL": "https://github.com/brunner-concepts/parameter-golf.git",
+    "CHECKOUT_REF": "9c4e513",
+    "REPO_DIR": "/workspace/parameter-golf",
+    "VENV_DIR": "/workspace/pgolf-venv",
+    "FLASH_ATTN_ROOT": "/workspace/flash-attention",
+    "FLASH_ATTN_REF": "v3.0.0",
+    "FLASH_ATTN_MODE": "auto",
+    "MAX_JOBS": "8",
+    "DATA_VARIANT": "sp1024"
+  },
+  "phases": [
+    {
+      "id": "bootstrap_env",
+      "description": "Prepare the repo, virtualenv, zstandard, and flash_attn_interface on the pod.",
+      "command": "bash scripts/bootstrap_runpod_env.sh",
+      "cwd": "${REPO_DIR}",
+      "log_name": "bootstrap_env.log",
+      "failure_summary": "Fix the environment/bootstrap failure on the smoke pod before retrying."
+    },
+    {
+      "id": "run_smoke",
+      "description": "Download one training shard and run the two-minute PR #414 smoke configuration.",
+      "command": "bash scripts/repro_pr414_smoke.sh",
+      "cwd": "${REPO_DIR}",
+      "log_name": "pr414_smoke.log",
+      "env": {
+        "RUN_ID": "pr414_smoke",
+        "SEED": "1337",
+        "TRAIN_BATCH_TOKENS": "131072",
+        "VAL_BATCH_SIZE": "65536",
+        "TRAIN_SEQ_LEN": "1024",
+        "EVAL_SEQ_LEN": "1024",
+        "MAX_WALLCLOCK_SECONDS": "120",
+        "VAL_LOSS_EVERY": "0",
+        "TRAIN_LOG_EVERY": "20",
+        "TRAIN_SHARDS": "1",
+        "NPROC_PER_NODE": "1"
+      },
+      "failure_summary": "Keep the smoke run on 1x H100 until it completes cleanly. Do not promote to 8x while operational failures remain."
+    }
+  ],
+  "success_summary": "Smoke completed. Review the log, runtime signals, and environment tax before spending 8x H100 SXM compute.",
+  "manual_next_spec": "run_specs/repro_pr414_full.json",
+  "manual_next_command": "If the smoke log is clean, manually launch the full repro: python3 scripts/run_watchdog.py run run_specs/repro_pr414_full.json"
+}

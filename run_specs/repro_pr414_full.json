@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "run_id": "repro_pr414_full",
+  "hypothesis": "Reproduce PR #414 on the full 8x H100 SXM budget once the single-GPU smoke path is clean.",
+  "parent_branch": "repro/pr414",
+  "track": "B",
+  "compute_tier": "8xH100-SXM",
+  "auto_promote": false,
+  "promotion_gate": "Full repro evidence must land within ±0.001 BPB of 1.1233 before any TTT transfer or 3-seed compute is allowed.",
+  "env": {
+    "REPO_URL": "https://github.com/brunner-concepts/parameter-golf.git",
+    "CHECKOUT_REF": "9c4e513",
+    "REPO_DIR": "/workspace/parameter-golf",
+    "VENV_DIR": "/workspace/pgolf-venv",
+    "FLASH_ATTN_ROOT": "/workspace/flash-attention",
+    "FLASH_ATTN_REF": "v3.0.0",
+    "FLASH_ATTN_MODE": "auto",
+    "MAX_JOBS": "8",
+    "DATA_VARIANT": "sp1024"
+  },
+  "phases": [
+    {
+      "id": "bootstrap_env",
+      "description": "Prepare the repo, virtualenv, zstandard, and flash_attn_interface on the 8x pod.",
+      "command": "bash scripts/bootstrap_runpod_env.sh",
+      "cwd": "${REPO_DIR}",
+      "log_name": "bootstrap_env.log",
+      "failure_summary": "Fix environment/bootstrap failures before retrying. Do not spend more seeds or branch out while infra is unresolved."
+    },
+    {
+      "id": "run_full_repro",
+      "description": "Download the full sp1024 cache and run the exact PR #414 reproduction command on 8 GPUs.",
+      "command": "bash scripts/repro_pr414_full.sh",
+      "cwd": "${REPO_DIR}",
+      "log_name": "pr414_seed1337.log",
+      "env": {
+        "RUN_ID": "pr414_seed1337",
+        "SEED": "1337",
+        "NPROC_PER_NODE": "8"
+      },
+      "failure_summary": "Investigate the exact repro failure and fix it before trying more expensive follow-on work."
+    }
+  ],
+  "success_summary": "Full repro completed. Capture BPB, runtime, and artifact size in 09_RESULTS before deciding whether to attempt PR #508 transfer.",
+  "manual_next_command": "Write 09_RESULTS/repro_414.md, then decide whether PR #508 reproduction is justified."
+}

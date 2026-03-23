@@ -32,3 +32,33 @@ Treat local work as control-plane preparation only: verify frontier state from p
 1. Use `scripts/sync_repro_targets.py` to materialize exact upstream record files and a manifest on the compute host.
 2. Use `scripts/audit_ttt_legality.py` against any TTT branch before keeping it alive.
 3. Do not start Track A creative transfer work until two mandatory reproductions land within tolerance.
+
+## 2026-03-23 — Durable watchdog control plane before first 8x repro
+
+**Decision:**
+Add a pod-local watchdog, durable run specs, and run-state files before the first 8x H100 SXM reproduction.
+
+**Rationale:**
+- The controller interface is turn-based, but the GPU jobs are not. Durable files are required to preserve exact state, failure reasons, and next commands across sessions.
+- Reproduction-first strategy loses value if each pod run depends on ad hoc shell state or implicit memory.
+- The watchdog must help execution without becoming a second decision-maker, so auto-promotion stays forbidden.
+
+**Consequences:**
+1. Use `scripts/run_watchdog.py` plus `run_specs/*.json` to launch smoke/full reproduction jobs.
+2. Persist liveness and next commands under `11_RUN_CONTROL/`.
+3. Treat watchdog success as operational evidence only; promotion still requires human/controller review against the project gates.
+
+## 2026-03-23 — PR #414 smoke path is operational, but not publishable
+
+**Decision:**
+Treat the completed 1xH100 SXM smoke run as infrastructure validation only. Do not interpret the BPB as frontier evidence and do not publish it.
+
+**Rationale:**
+- The smoke run completed end-to-end: FlashAttention-3 bootstrap, data download, training loop, EMA evaluation, and artifact packaging all worked.
+- The run was intentionally truncated to 120 seconds on a single GPU and one train shard, so the resulting `val_bpb: 1.7547` is not remotely comparable to the published `1.1233`.
+- The final int6 roundtrip collapsed to `6.1321` BPB, which is a strong signal that smoke-scale quantized numbers are not useful for promotion decisions.
+
+**Consequences:**
+1. Scoreboard / PR answer remains **no**: nothing from this project is publishable yet.
+2. The operational blocker moved from "can the stack run at all?" to "can the full managed 8x repro hit the claimed score within tolerance?"
+3. Next highest-EV action is a managed full PR #414 repro on 8x H100 SXM, ideally after pushing the watchdog scaffold and preserving the flash-attention bootstrap tax.

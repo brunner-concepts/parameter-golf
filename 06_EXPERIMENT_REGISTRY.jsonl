@@ -1,2 +1,4 @@
 {"id":"E000","type":"bootstrap","description":"Project initialized, upstream forked, frontier state ingested","timestamp":"2026-03-23T03:30:00Z","status":"complete"}
 {"id":"E001","type":"ops","description":"Verified live frontier from upstream README and issue #140, extracted exact PR heads for #414/#505/#508, and added repro-sync plus TTT legality audit tooling","timestamp":"2026-03-23T19:15:00Z","status":"complete"}
+{"id":"E002","type":"ops","description":"Added durable run control: pod-local watchdog, PR #414 smoke/full run specs, and 11_RUN_CONTROL state files for resumable execution.","timestamp":"2026-03-23T20:20:00Z","status":"complete"}
+{"id":"E003","type":"smoke","description":"Completed PR #414 operational smoke run on 1x H100 SXM: train/eval/artifact path worked end-to-end, but score was not promotion-worthy and is not publishable.","timestamp":"2026-03-23T20:37:00Z","status":"complete"}
