@@ -1,0 +1,5 @@
+{"id":"H001","hypothesis":"Legal score-first TTT on GEPA #505 base will beat 1.1181 by ≥0.002","track":"A","priority":1,"status":"queued","parent":"#505","estimated_ev":"high","blocker":"must reproduce #505 first"}
+{"id":"H002","hypothesis":"GPTQ full (not lite) on #414 base reduces quant tax further","track":"B","priority":2,"status":"queued","parent":"#414","estimated_ev":"medium","blocker":"must reproduce #414 first"}
+{"id":"H003","hypothesis":"AdamW vs SGD+momentum TTT on identical GEPA base — which transfers better","track":"A","priority":3,"status":"queued","parent":"#505","estimated_ev":"medium","blocker":"must reproduce #505 first"}
+{"id":"H004","hypothesis":"BigramHash bucket scaling from 8192 to 16384 on any base","track":"C","priority":4,"status":"queued","parent":"any","estimated_ev":"low","blocker":"must have at least one repro"}
+{"id":"H005","hypothesis":"VE128 dim tuning (96 vs 128 vs 192) on GEPA base","track":"C","priority":5,"status":"queued","parent":"#505","estimated_ev":"low","blocker":"must reproduce #505 first"}
