@@ -62,3 +62,18 @@ Treat the completed 1xH100 SXM smoke run as infrastructure validation only. Do n
 1. Scoreboard / PR answer remains **no**: nothing from this project is publishable yet.
 2. The operational blocker moved from "can the stack run at all?" to "can the full managed 8x repro hit the claimed score within tolerance?"
 3. Next highest-EV action is a managed full PR #414 repro on 8x H100 SXM, ideally after pushing the watchdog scaffold and preserving the flash-attention bootstrap tax.
+
+## 2026-03-23 — Off-pod mirroring is mandatory for expensive runs
+
+**Decision:**
+Treat local mirroring, summary generation, and optional notifications as part of the standard launch path for any materially expensive RunPod experiment.
+
+**Rationale:**
+- The first 8x PR #414 repro proved the training path can run, but the pod later exited on the provider side and terminal certainty was weaker than it should have been.
+- Pod-local watchdog state is necessary but not sufficient; the controller also needs off-pod copies of status, active log tail, and terminal state.
+- Better observability is a higher-EV investment than adding more autonomy or more speculative branches right now.
+
+**Consequences:**
+1. Launches should use `scripts/launch_runpod_managed_run.py` where possible.
+2. `scripts/mirror_runpod_watchdog.py` should mirror `status.txt`, `current_state.json`, `heartbeat.json`, `terminal_result.json`, and the active log tail into `11_RUN_CONTROL/live/<run_id>/`.
+3. The next full 8x repro should not rely on pod-local files alone for progress visibility or post-mortem certainty.

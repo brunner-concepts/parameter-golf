@@ -41,6 +41,7 @@ Owns: record eligibility checklist, concise PR description, logs/artifacts/plots
 
 Owns: pod-local phase execution, heartbeats, durable run state, failure capture, and next-command suggestions.
 Never auto-promotes to a more expensive compute tier. Never overrides the promotion gates.
+Pairs with a local mirror/notifier layer that copies run state off-pod so expensive runs remain observable even if the provider exits the machine.
 
 ## Execution phases
 
@@ -94,3 +95,8 @@ The watchdog additionally persists:
 - `11_RUN_CONTROL/heartbeat.json`
 - `11_RUN_CONTROL/next_action.txt`
 - immutable per-run logs under `11_RUN_CONTROL/runs/`
+
+The local mirror additionally persists:
+- `11_RUN_CONTROL/live/<run_id>/summary.md`
+- `11_RUN_CONTROL/live/<run_id>/active_log.tail.txt`
+- `11_RUN_CONTROL/live/<run_id>/pod.json`
