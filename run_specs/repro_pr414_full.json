@@ -9,7 +9,7 @@
   "promotion_gate": "Full repro evidence must land within ±0.001 BPB of 1.1233 before any TTT transfer or 3-seed compute is allowed.",
   "env": {
     "REPO_URL": "https://github.com/brunner-concepts/parameter-golf.git",
-    "CHECKOUT_REF": "9c4e513",
+    "CHECKOUT_REF": "main",
     "REPO_DIR": "/workspace/parameter-golf",
     "VENV_DIR": "/workspace/pgolf-venv",
     "FLASH_ATTN_ROOT": "/workspace/flash-attention",

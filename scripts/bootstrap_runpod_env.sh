@@ -18,9 +18,25 @@ if [[ ! -d "${REPO_DIR}/.git" ]]; then
 fi
 
 cd "${REPO_DIR}"
-git fetch --all --tags
-git checkout "${CHECKOUT_REF}"
-git rev-parse HEAD
+CURRENT_HEAD=$(git rev-parse HEAD)
+TARGET_HEAD=""
+
+if git rev-parse --verify "${CHECKOUT_REF}" >/dev/null 2>&1; then
+  TARGET_HEAD=$(git rev-parse "${CHECKOUT_REF}")
+elif [[ "${CHECKOUT_REF}" == "main" || "${CHECKOUT_REF}" == "master" ]]; then
+  git fetch origin "${CHECKOUT_REF}"
+  TARGET_HEAD=$(git rev-parse "origin/${CHECKOUT_REF}")
+fi
+
+if [[ -n "${TARGET_HEAD}" && "${CURRENT_HEAD}" == "${TARGET_HEAD}" ]]; then
+  echo "repo already at ${TARGET_HEAD}; skipping git checkout"
+else
+  git fetch --all --tags
+  git checkout "${CHECKOUT_REF}"
+  TARGET_HEAD=$(git rev-parse HEAD)
+fi
+
+echo "${TARGET_HEAD}"
 
 python3 -m venv --system-site-packages "${VENV_DIR}"
 # shellcheck disable=SC1091

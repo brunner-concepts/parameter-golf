@@ -9,7 +9,7 @@
   "promotion_gate": "Smoke must complete cleanly before launching the 8x H100 SXM reproduction spec.",
   "env": {
     "REPO_URL": "https://github.com/brunner-concepts/parameter-golf.git",
-    "CHECKOUT_REF": "9c4e513",
+    "CHECKOUT_REF": "main",
     "REPO_DIR": "/workspace/parameter-golf",
     "VENV_DIR": "/workspace/pgolf-venv",
     "FLASH_ATTN_ROOT": "/workspace/flash-attention",
