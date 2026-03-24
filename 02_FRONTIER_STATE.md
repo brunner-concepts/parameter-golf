@@ -1,63 +1,85 @@
 # Frontier State
 
-Last updated: 2026-03-23
+Last updated: 2026-03-24
 
 ## Official leaderboard
 
-| Rank | BPB | Author | PR |
-|------|-----|--------|----|
-| 1 | 1.1428 | thwu1 | #180 |
-| 2 | 1.1458 | Raahil Shah | #162 |
-| 3 | 1.1502 | aruniyer | #86 |
+Source: upstream [README](https://github.com/openai/parameter-golf/blob/main/README.md) as of March 24, 2026.
 
-## Live tracker — key pending PRs
+| Rank | BPB | Author | Record / PR lineage |
+|------|-----|--------|---------------------|
+| 1 | **1.1194** | abaybektursun | Accepted official record on PR #549: LeakyReLU² + Legal Score-First TTT + Parallel Muon on the PR #414 stack |
+| 2 | 1.1228 | signalrush | Accepted record package based on the PR #414 direction |
+| 3 | 1.1248 | jfprincz | Accepted record package based on the PR #287 / #315 family |
 
-Source: Issue #140 (live AI commentary)
+## Live validated frontier
+
+Source: Issue #140 live commentary plus current PR heads on March 24, 2026.
 
 | PR | BPB | Type | Description | Interpretation |
 |----|-----|------|-------------|----------------|
-| #505 | **1.1181** | Non-TTT | GEPA arch: SwiGLU + VE128 + U-Net Skip Gates, 11L, seq2048 | **Strongest non-TTT base. Track A parent.** |
-| #508 | **1.1215** | Legal TTT | GPTQ + Early QAT + Legal score-first TTT on #414 base | **Best validated legal TTT. Track B target.** |
-| #503 | **1.1218** | Legal TTT | 11L XSA11 + AdamW TTT, score-first, last 2 blocks unfrozen | Legal AdamW TTT variant. Alternative TTT recipe. |
-| #473 | **1.1220** | Legal TTT | SGD+momentum TTT on #414 base, parameter banking | Legal SGD TTT variant. Parallel Muon optimizer. |
-| #414 | **1.1233** | Non-TTT | 11L EMA + GPTQ-lite + warmdown3500 + QAT@0.15 | **Strongest mature standard stack. Track B parent.** |
-| #462 | 1.0672 | ⚠️ Pre-eval TTT | GEPA + AdamW TTT | Illegal pre-eval. Do NOT replicate TTT approach. |
-| #518 | 1.0814 | ⚠️ Pre-eval TTT | LeakyReLU² + Cosine TTT | Illegal pre-eval. Do NOT replicate TTT approach. |
-| #375 | N/A | Negative results | 13 techniques tested, most regressed | **Throughput losses are ruinous near frontier.** |
+| #606 | **1.1162** | Legal TTT | Int5 GPTQ + Soft-Round QAT + legal cosine AdamW TTT | **Best live legal-TTT frontier currently visible.** |
+| #615 | **1.1169** | Legal TTT | Residual Input Mixing + mixed int6 GPTQ + grouped TTT + MLP 3.5x | Strong live legal-TTT alternative; shows architecture changes can still matter. |
+| #634 | **1.1171** | Non-TTT | XSA-all + Full GPTQ + Parallel Muon + Selective Pruning | Strongest live non-TTT frontier currently visible. |
+| #626 | **1.1180** | Non-TTT | Full GPTQ + LeakyReLU² + Parallel Muon | Independent confirmation that the accepted #549 family has strong non-TTT legs too. |
+| #505 | **1.1181** | Non-TTT | GEPA arch: SwiGLU + VE128 + U-Net Skip Gates, 11L, seq2048 | **Still the strongest simple GEPA base and Track A parent.** |
+| #578 | **1.1215** | Legal TTT | Full GPTQ + Early QAT + Legal TTT on the #414 stack | Historically important, but now superseded by accepted #549 and newer live runs. |
+| #414 | **1.1233** | Non-TTT | 11L EMA + GPTQ-lite + warmdown3500 + QAT@0.15 | **Still the right reproduction anchor, but no longer a plausible winning endpoint.** |
+| #609 | **1.1154** | Non-record | XSA-all + Full GPTQ + Selective Pruning | **Important warning:** reclassified non-record because GPTQ calibration was outside the allowed training budget. |
+| #375 | N/A | Negative results | 13 techniques tested, most regressed | Throughput losses are still ruinous near the frontier. |
 
-## Reproduction notes from exact PR heads
+## Strategic interpretation
 
+1. **Legal score-first TTT is now officially accepted.**
+   PR #549 merged on March 24, 2026 and now tops the official README leaderboard at `1.1194`. This materially lowers legality uncertainty for the #414-family TTT path.
+
+2. **The old Track B target is stale.**
+   Reproducing `#414` is still useful as a clean delta anchor, but `#508` is no longer the frontier target. The real Track B competition is now `#549`, `#606`, and `#615`.
+
+3. **Full GPTQ is promising but governance-sensitive.**
+   The live tracker explicitly reclassified `#609` as non-record because calibration happened outside the training budget. Any Full GPTQ path must account for calibration cleanly inside the allowed budget.
+
+4. **GEPA still matters, but the accepted bar moved below it.**
+   `#505` at `1.1181` remains an excellent base, but the official accepted record is already `1.1194`. GEPA without a new transfer or systems edge is no longer enough by itself.
+
+5. **Chronology pressure increased.**
+   The frontier between `1.116x` and `1.118x` is now crowded with multiple open PRs. Any future record attempt should target a score materially below `1.1194`, not just barely below the previous `1.1428` era threshold.
+
+## Reproduction notes
+
+- **#549**: Officially merged and accepted. This is now the authoritative proof that legal score-first TTT on the `#414` family is record-eligible.
 - **#414**: PR title claims the 3-seed mean (`1.1233`), but `submission.json` packages the best seed (`1.12278022`). Reproduction tolerance should be checked against the PR claim, not only the packaged seed.
-- **#505**: PR head contains only `README.md` and `train_gpt.py`. There is no `submission.json` or train log in the PR files, so reproduction must use the README claim plus code defaults unless upstream adds more artifacts.
-- **#508**: PR title claims the 3-seed mean (`1.1215`), while `submission.json` records both the best seed (`1.12059684`) and the mean (`1.12150756`). Use the mean for promotion comparisons and the best seed for packaging parity.
+- **#505**: PR head still contains only `README.md` and `train_gpt.py`. There is no `submission.json` or train log in the PR files, so reproduction must use the README claim plus code defaults unless upstream adds more artifacts.
+- **#578**: Use it as a historical recipe source, not as the current frontier target.
+- **#609**: Treat as a cautionary case for calibration accounting, not as a direct record target.
 
-## Key architectural components (current frontier)
+## Key architectural components to watch
 
-From #505 (GEPA):
+From **#549 accepted stack**:
+- LeakyReLU(0.5)² activation on the `#414` family
+- Legal score-first TTT
+- Parallel Muon
+- Accepted official record at `1.1194`
+
+From **#505 (GEPA)**:
 - SwiGLU FFN with Star-ReLU (relu² + affine), hidden=1792
 - U-Net Skip Gates: 5 encoder + 6 decoder with learned gating
-- XSA4 (Extended Self-Attention in last 4 layers)
-- Value Embeddings (VE128): 128-dim shared, per-layer scales on layers 9-10
-- BigramHash: 8192 buckets, 128-dim
-- EMA decay=0.997, Partial RoPE 16 dims
-- LN Scale, Late QAT@0.15, Int6 + GPTQ-lite + zstd-22
-- Sequence length 2048 (key: +0.008 BPB over seq1024)
+- XSA4 in the deepest layers
+- VE128 with per-layer scales
+- BigramHash 8192, seq2048
 
-From #414 (standard):
-- 11L, 512d, 8H/4KV, MLP 3× (relu²)
+From **#414 family**:
+- 11L, 512d, 8H/4KV, MLP 3× (relu² baseline)
 - U-Net skips, XSA4, Partial RoPE 16/64
 - LN Scale, VE128, SmearGate, BigramHash(2048)
-- EMA(0.997), Tight SWA, Muon WD=0.04
-- GPTQ-lite (5-percentile per-row optimal clip), int6+zstd-22
-- Late QAT@0.15, ~82-89ms/step, ~7100 steps in 600s
+- EMA(0.997), Tight SWA, Late QAT, FA3
 
-From #508 (legal TTT recipe):
-- GPTQ quantization: 256-sample calibration, column reordering, block-128 Cholesky error compensation
-- Early QAT threshold 0.5 (3× more QAT steps)
-- Score-first TTT: EMA scoring (decay=0.995), cosine LR over 200 chunks
-- Embedding freeze during TTT, SGD+momentum 0.9, 3 epochs/chunk, grad clip 1.0
-- Quant tax reduced from 0.0082 to 0.0058 BPB (32% reduction)
+## Economics
 
-## Economics (#375 meta-insight)
+At ~86ms/step, each 1ms of per-step overhead costs ~0.006 BPB near the frontier. This still dominates most idea quality arguments.
 
-At 86ms/step, each 1ms of per-step overhead costs ~0.006 BPB. Most frontier ideas fail this throughput test. EMA > SWA by 0.003 BPB. Weight decay controls compressed artifact size (~1.5-2MB per 0.01 WD). Batch 786K > 524K by 0.004 BPB. FA3 Hopper gives 15-20% more steps at same wallclock.
+From our own latest managed smoke:
+- the model-side smoke path works,
+- but rebuilding FlashAttention from source on every pod is economically unacceptable.
+
+Warm-starting FA3 is now part of the critical path to any serious 8x reproduction.

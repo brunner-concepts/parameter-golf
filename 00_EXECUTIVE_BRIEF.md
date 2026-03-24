@@ -6,9 +6,9 @@ Ship the earliest legally defensible PR that is accepted as the new official rec
 
 ## Current target to beat
 
-Official SOTA: **1.1428 BPB** (thwu1, PR #180)
-Best pending non-TTT: **1.1181 BPB** (#505, GEPA arch, 3-seed)
-Best pending legal TTT: **1.1215 BPB** (#508, GPTQ + Legal TTT, 3-seed)
+Official SOTA: **1.1194 BPB** (abaybektursun, PR #549, merged March 24, 2026)
+Best pending non-TTT: **1.1171 BPB** (#634, XSA-all + Full GPTQ + Parallel Muon + Selective Pruning, 3-seed)
+Best pending legal TTT: **1.1162 BPB** (#606, int5 GPTQ + Soft-Round QAT + legal TTT, 3-seed)
 
 To land an accepted record, the submission must beat the official SOTA by ≥0.005 nats at p < 0.01.
 
@@ -17,14 +17,14 @@ To land an accepted record, the submission must beat the official SOTA by ≥0.0
 | Track | Allocation | Target | Status |
 |-------|-----------|--------|--------|
 | **A: GEPA + legal TTT** | 60% | Port legal score-first TTT onto #505 GEPA base | Not started |
-| **B: #414 + legal TTT** | 30% | Reproduce #414, harden #508 legal TTT | Not started |
+| **B: accepted-stack hardening** | 30% | Reproduce #414, then target the accepted #549 / live #606-#615 frontier | Smoke operational; full repro pending |
 | **C: Micro-deltas** | 10% | Tiny additions with near-zero latency/byte cost | Not started |
 
 ## Top 3 hypotheses
 
-1. Legal score-first TTT on GEPA base will beat 1.1181 by at least 0.002 (Track A)
-2. GPTQ + Early QAT improvements can further compress #414-family quant tax (Track B)
-3. BigramHash bucket scaling or VE dim tuning may yield micro-delta on any base (Track C)
+1. The shortest official-track route now runs through the accepted #549 family or the live #606/#615 variants, not historical #508 alone (Track B).
+2. Legal score-first TTT on GEPA still offers the largest upside, but only if it transfers without paying too much throughput or byte tax (Track A).
+3. Full GPTQ can be competitive, but only if calibration is cleanly inside the allowed budget; otherwise it risks non-record reclassification (#609 lesson).
 
 ## Stop/go rules
 

@@ -137,3 +137,19 @@ Treat the corrected managed smoke as a successful operational validation and a f
 1. Preserve or transfer the completed FlashAttention build from the smoke pod before stopping it, or otherwise create a reusable warm-start path.
 2. Keep the next scientific target unchanged: full managed PR #414 reproduction, but only after the FA bootstrap tax is amortized.
 3. Continue treating smoke BPBs as infra evidence only; no scoreboard or promotion claim is justified yet.
+
+## 2026-03-24 — Official frontier moved; Track B target must update from #508-era thinking to #549/#606/#615
+
+**Decision:**
+Adjust research sequencing, not away from the `#414` family, but away from stale March 23 assumptions. Keep the immediate next action as a warm-started full `#414` repro, then target the accepted `#549` family and the live `#606/#615/#634` frontier rather than treating `#508` as the current Track B destination.
+
+**Rationale:**
+- The upstream README now lists `1.1194` from PR `#549` as the official accepted leaderboard leader, merged on March 24, 2026.
+- The live tracker now shows several stronger pending runs: `#606` at `1.1162`, `#615` at `1.1169`, `#634` at `1.1171`, and `#626` at `1.1180`.
+- PR `#609` was reclassified as non-record because GPTQ calibration happened outside the allowed budget. This changes how we should evaluate Full GPTQ paths: lower BPB is not enough without clean budget accounting.
+- Therefore, reproducing `#414` remains useful as a delta anchor, but reproducing `#508` alone is no longer enough to define the shortest winning Track B route.
+
+**Consequences:**
+1. Update project memory so future sessions do not optimize against the stale `1.1428` / `#508` frontier.
+2. Keep the next compute action unchanged: use the FA warm-start to run the full managed `#414` repro.
+3. After `#414` repro, prioritize accepted-stack / live-frontier Track B work (`#549`, `#606`, `#615`, `#634`) ahead of historical `#508` hardening.
