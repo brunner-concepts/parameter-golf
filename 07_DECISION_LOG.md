@@ -122,3 +122,18 @@ Treat the latest managed `repro_pr414_smoke` failure as a bootstrap-control-plan
 1. Pin `FLASH_ATTN_REF` in both PR #414 run specs and the bootstrap script to a real, reproducible upstream commit.
 2. Keep the research sequence unchanged: `#414 -> #508`, then only revisit Track A transfer work.
 3. Continue using low-cost smoke validation to clear infra bugs before any 8x H100 SXM spend.
+
+## 2026-03-24 — Managed PR #414 smoke now completes, but bootstrap tax dominates economics
+
+**Decision:**
+Treat the corrected managed smoke as a successful operational validation and a failed economic validation. Do not launch the 8x H100 SXM reproduction until the FlashAttention bootstrap cost is reused or eliminated.
+
+**Rationale:**
+- The managed smoke completed end-to-end on 1x H100 PCIe: watchdog, mirror, dashboard, data download, training loop, EMA path, evaluation, and artifact packaging all worked.
+- The run remained non-publishable scientifically: `val_bpb: 1.9565` at the 120s stop and `final_int6_sliding_window val_bpb: 5.6011` are smoke-only numbers, not frontier evidence.
+- The important quantitative finding is operational economics: `bootstrap_env` took `7709.693s`, far larger than the actual smoke phase (`987.907s`). Rebuilding FlashAttention from source on every pod would destroy EV, especially on 8x H100 SXM.
+
+**Consequences:**
+1. Preserve or transfer the completed FlashAttention build from the smoke pod before stopping it, or otherwise create a reusable warm-start path.
+2. Keep the next scientific target unchanged: full managed PR #414 reproduction, but only after the FA bootstrap tax is amortized.
+3. Continue treating smoke BPBs as infra evidence only; no scoreboard or promotion claim is justified yet.
