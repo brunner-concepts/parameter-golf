@@ -48,6 +48,7 @@ python3 scripts/mirror_runpod_watchdog.py \
 This mirrors:
 
 - `pod.json`
+- `events.jsonl`
 - `current_state.json`
 - `heartbeat.json`
 - `status.txt`
@@ -58,17 +59,47 @@ This mirrors:
 
 `summary.md` is the highest-signal file to open when checking a run.
 
-## One-command launch
+## Guardrailed launch
 
-For managed launches that create the pod, start the watchdog remotely, and detach the local mirror:
+For a single approved spec with local mirroring:
 
 ```bash
 python3 scripts/launch_runpod_managed_run.py run_specs/repro_pr414_full.json --notify-macos
+```
+
+For hands-off execution with one automatic same-spec infra retry:
+
+```bash
+python3 scripts/operator_supervisor.py run_specs/repro_pr414_full.json
 ```
 
 This is intentionally not fully autonomous:
 
 - it refuses to launch when balance is below the tier minimum
 - it starts exactly one requested spec
-- it does not auto-promote to a more expensive run
+- it may retry the same approved spec once after an infra/provider exit with no clean terminal result
+- it does not auto-promote to a more expensive or different run
 - final stop/go decisions still belong to the controller
+
+## Dashboard
+
+Serve the live mirror directory privately:
+
+```bash
+python3 scripts/serve_run_control_dashboard.py --host 127.0.0.1 --port 8787
+```
+
+Useful routes:
+
+- `/` — all mirrored runs
+- `/runs/<run_id>` — one run detail page
+- `/api/runs` — JSON for automation
+
+## Nissanbox mode
+
+The recommended always-on setup is the Nissanbox container scaffold in:
+
+- `docker-compose.nissanbox.yml`
+- `ops/nissanbox/README.md`
+
+That mode keeps RunPod control, notifications, and the dashboard alive without depending on this Mac.

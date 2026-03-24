@@ -25,6 +25,16 @@ COMPUTE_DEFAULTS = {
 }
 
 
+class LaunchError(RuntimeError):
+    def __init__(self, message: str, launch_summary: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.launch_summary = launch_summary or {}
+
+
+def repo_root() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
 def run_json(cmd: list[str]) -> dict[str, Any]:
     proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
     return json.loads(proc.stdout)
@@ -43,18 +53,65 @@ def infer_defaults(spec: dict[str, Any]) -> dict[str, Any]:
     return COMPUTE_DEFAULTS.get(spec.get("compute_tier"), COMPUTE_DEFAULTS["1xH100-smoke"])
 
 
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Launch a managed RunPod session and detach a local mirror process.")
+    parser.add_argument("spec", help="Path to the run spec to execute remotely.")
+    parser.add_argument("--template-id", default=DEFAULT_TEMPLATE_ID)
+    parser.add_argument("--gpu-id")
+    parser.add_argument("--gpu-count", type=int)
+    parser.add_argument("--container-disk-gb", type=int, default=50)
+    parser.add_argument("--volume-gb", type=int, default=50)
+    parser.add_argument("--pod-name")
+    parser.add_argument("--repo-ref", default="main")
+    parser.add_argument("--remote-state-dir", default="/workspace/run_control")
+    parser.add_argument("--mirror-interval", type=float, default=10.0)
+    parser.add_argument("--mirror-log-lines", type=int, default=120)
+    parser.add_argument("--wait-timeout", type=int, default=600)
+    parser.add_argument("--remote-launch-retries", type=int, default=3)
+    parser.add_argument("--remote-launch-retry-delay", type=float, default=5.0)
+    parser.add_argument("--min-balance", type=float)
+    parser.add_argument("--notify-macos", action="store_true")
+    parser.add_argument("--webhook-url")
+    parser.add_argument("--telegram-bot-token")
+    parser.add_argument("--telegram-chat-id")
+    parser.add_argument("--mirror-exit-when-inactive", action=argparse.BooleanOptionalAction, default=True)
+    return parser
+
+
 def wait_for_ssh(pod_id: str, timeout_s: int) -> dict[str, Any]:
     started = time.time()
+    last_status = "unknown"
     while time.time() - started < timeout_s:
         pod = run_json(["runpodctl", "pod", "get", pod_id])
+        last_status = str(pod.get("desiredStatus"))
         ssh = pod.get("ssh") or {}
         if pod.get("desiredStatus") == "RUNNING" and "ip" in ssh and "port" in ssh:
             return pod
+        if last_status == "EXITED":
+            raise LaunchError(f"Pod {pod_id} exited before SSH became available.")
         time.sleep(5)
-    raise RuntimeError(f"Timed out waiting for SSH on pod {pod_id}")
+    raise LaunchError(f"Timed out waiting for SSH on pod {pod_id}; last status was {last_status}.")
 
 
-def build_remote_launch_command(repo_ref: str, spec_path: str, remote_state_dir: str, session_name: str) -> str:
+def remote_ssh_cmd(pod: dict[str, Any]) -> list[str]:
+    ssh = pod["ssh"]
+    return [
+        "ssh",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "-i",
+        str(ssh["ssh_key"]["path"]),
+        f"root@{ssh['ip']}",
+        "-p",
+        str(ssh["port"]),
+    ]
+
+
+def stop_pod_quietly(pod_id: str) -> None:
+    subprocess.run(["runpodctl", "pod", "stop", pod_id], capture_output=True, text=True, check=False)
+
+
+def build_remote_launch_command(repo_ref: str, remote_spec_path: str, remote_state_dir: str, session_name: str) -> str:
     return "\n".join(
         [
             "set -euo pipefail",
@@ -69,7 +126,7 @@ def build_remote_launch_command(repo_ref: str, spec_path: str, remote_state_dir:
             (
                 f"tmux new-session -d -s {session_name} "
                 f"\"cd /workspace/parameter-golf && "
-                f"python3 scripts/run_watchdog.py run --state-dir {remote_state_dir} {spec_path} "
+                f"python3 scripts/run_watchdog.py run --state-dir {remote_state_dir} {remote_spec_path} "
                 f"| tee /workspace/{session_name}.log\""
             ),
             "tmux ls",
@@ -77,31 +134,62 @@ def build_remote_launch_command(repo_ref: str, spec_path: str, remote_state_dir:
     )
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Launch a managed RunPod session and detach a local mirror process.")
-    parser.add_argument("spec", help="Path to the run spec to execute remotely.")
-    parser.add_argument("--template-id", default=DEFAULT_TEMPLATE_ID)
-    parser.add_argument("--gpu-id")
-    parser.add_argument("--gpu-count", type=int)
-    parser.add_argument("--container-disk-gb", type=int, default=50)
-    parser.add_argument("--volume-gb", type=int, default=50)
-    parser.add_argument("--pod-name")
-    parser.add_argument("--repo-ref", default="main")
-    parser.add_argument("--remote-state-dir", default="/workspace/run_control")
-    parser.add_argument("--mirror-interval", type=float, default=15.0)
-    parser.add_argument("--wait-timeout", type=int, default=600)
-    parser.add_argument("--notify-macos", action="store_true")
-    args = parser.parse_args()
+def build_mirror_command(args: argparse.Namespace, pod_id: str, local_dir: Path) -> list[str]:
+    mirror_cmd = [
+        sys.executable,
+        str(repo_root() / "scripts" / "mirror_runpod_watchdog.py"),
+        "--pod-id",
+        pod_id,
+        "--remote-state-dir",
+        args.remote_state_dir,
+        "--local-dir",
+        str(local_dir),
+        "--interval",
+        str(args.mirror_interval),
+        "--log-lines",
+        str(args.mirror_log_lines),
+    ]
+    if args.notify_macos:
+        mirror_cmd.append("--notify-macos")
+    if args.webhook_url:
+        mirror_cmd.extend(["--webhook-url", args.webhook_url])
+    if args.telegram_bot_token:
+        mirror_cmd.extend(["--telegram-bot-token", args.telegram_bot_token])
+    if args.telegram_chat_id:
+        mirror_cmd.extend(["--telegram-chat-id", args.telegram_chat_id])
+    if not args.mirror_exit_when_inactive:
+        mirror_cmd.append("--no-exit-when-inactive")
+    return mirror_cmd
 
-    repo_root = Path(__file__).resolve().parent.parent
+
+def reset_live_dir(local_dir: Path) -> None:
+    local_dir.mkdir(parents=True, exist_ok=True)
+    for name in (
+        "pod.json",
+        "mirror_state.json",
+        "current_state.json",
+        "heartbeat.json",
+        "status.txt",
+        "next_action.txt",
+        "terminal_result.json",
+        "active_log.tail.txt",
+        "summary.md",
+    ):
+        path = local_dir / name
+        if path.exists():
+            path.unlink()
+
+
+def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
+    root = repo_root()
     spec_path = Path(args.spec).resolve()
     spec = load_spec(spec_path)
     defaults = infer_defaults(spec)
 
     user = run_json(["runpodctl", "user"])
-    min_balance = defaults["min_balance"]
+    min_balance = float(args.min_balance if args.min_balance is not None else defaults["min_balance"])
     if float(user["clientBalance"]) < min_balance:
-        raise RuntimeError(
+        raise LaunchError(
             f"Insufficient RunPod balance (${user['clientBalance']:.2f}). "
             f"Top up to at least ${min_balance:.2f} before launching {spec['run_id']}."
         )
@@ -109,7 +197,6 @@ def main() -> int:
     gpu_id = args.gpu_id or defaults["gpu_id"]
     gpu_count = args.gpu_count or defaults["gpu_count"]
     pod_name = args.pod_name or f"{spec['run_id']}-{gpu_count}x"
-
     create = run_json(
         [
             "runpodctl",
@@ -132,63 +219,80 @@ def main() -> int:
     )
     pod = create[0] if isinstance(create, list) else create
     pod_id = pod["id"]
-    pod = wait_for_ssh(pod_id, args.wait_timeout)
-    ssh = pod["ssh"]
-
-    ssh_cmd = [
-        "ssh",
-        "-i",
-        str(ssh["ssh_key"]["path"]),
-        f"root@{ssh['ip']}",
-        "-p",
-        str(ssh["port"]),
-    ]
-    session_name = spec["run_id"]
-    try:
-        spec_rel = spec_path.relative_to(repo_root)
-    except ValueError as exc:
-        raise RuntimeError(f"Spec path {spec_path} must live under repo root {repo_root}") from exc
-    remote_spec_path = Path("/workspace/parameter-golf") / spec_rel
-    remote_command = build_remote_launch_command(args.repo_ref, str(remote_spec_path), args.remote_state_dir, session_name)
-    run_text(ssh_cmd + [remote_command])
-
-    local_dir = repo_root / "11_RUN_CONTROL" / "live" / spec["run_id"]
-    local_dir.mkdir(parents=True, exist_ok=True)
-    mirror_log = local_dir / "mirror.log"
-    mirror_cmd = [
-        sys.executable,
-        str(repo_root / "scripts" / "mirror_runpod_watchdog.py"),
-        "--pod-id",
-        pod_id,
-        "--remote-state-dir",
-        args.remote_state_dir,
-        "--local-dir",
-        str(local_dir),
-        "--interval",
-        str(args.mirror_interval),
-    ]
-    if args.notify_macos:
-        mirror_cmd.append("--notify-macos")
-    with mirror_log.open("a", encoding="utf-8") as handle:
-        proc = subprocess.Popen(
-            mirror_cmd,
-            stdout=handle,
-            stderr=subprocess.STDOUT,
-            cwd=str(repo_root),
-            start_new_session=True,
-            text=True,
-        )
-
-    launch_summary = {
+    launch_summary: dict[str, Any] = {
         "pod_id": pod_id,
         "pod_name": pod_name,
         "run_id": spec["run_id"],
-        "mirror_pid": proc.pid,
-        "mirror_log": str(mirror_log.resolve()),
-        "local_dir": str(local_dir.resolve()),
-        "ssh_command": ssh["ssh_command"],
+        "spec_path": str(spec_path),
+        "balance_at_launch": float(user["clientBalance"]),
+        "spend_limit": user.get("spendLimit"),
+        "compute_tier": spec.get("compute_tier"),
+        "gpu_id": gpu_id,
+        "gpu_count": gpu_count,
     }
-    (local_dir / "launch.json").write_text(json.dumps(launch_summary, indent=2) + "\n", encoding="utf-8")
+
+    try:
+        pod = wait_for_ssh(pod_id, args.wait_timeout)
+        ssh_cmd = remote_ssh_cmd(pod)
+        try:
+            spec_rel = spec_path.relative_to(root)
+        except ValueError as exc:
+            stop_pod_quietly(pod_id)
+            raise LaunchError(f"Spec path {spec_path} must live under repo root {root}.", launch_summary) from exc
+        remote_spec_path = Path("/workspace/parameter-golf") / spec_rel
+        remote_command = build_remote_launch_command(args.repo_ref, str(remote_spec_path), args.remote_state_dir, spec["run_id"])
+        remote_error = None
+        for attempt in range(1, int(args.remote_launch_retries) + 1):
+            try:
+                run_text(ssh_cmd + [remote_command])
+                remote_error = None
+                break
+            except subprocess.CalledProcessError as exc:
+                remote_error = exc
+                if attempt < int(args.remote_launch_retries):
+                    time.sleep(float(args.remote_launch_retry_delay))
+                    continue
+        if remote_error is not None:
+            stop_pod_quietly(pod_id)
+            details = remote_error.stderr.strip() or remote_error.stdout.strip() or str(remote_error)
+            raise LaunchError(f"Remote watchdog launch failed on pod {pod_id}: {details}", launch_summary) from remote_error
+
+        local_dir = root / "11_RUN_CONTROL" / "live" / spec["run_id"]
+        local_dir.mkdir(parents=True, exist_ok=True)
+        reset_live_dir(local_dir)
+        mirror_log = local_dir / "mirror.log"
+        mirror_cmd = build_mirror_command(args, pod_id, local_dir)
+        with mirror_log.open("a", encoding="utf-8") as handle:
+            proc = subprocess.Popen(
+                mirror_cmd,
+                stdout=handle,
+                stderr=subprocess.STDOUT,
+                cwd=str(root),
+                start_new_session=True,
+                text=True,
+            )
+
+        launch_summary.update(
+            {
+                "mirror_pid": proc.pid,
+                "mirror_log": str(mirror_log.resolve()),
+                "local_dir": str(local_dir.resolve()),
+                "ssh_command": pod["ssh"]["ssh_command"],
+                "launched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            }
+        )
+        (local_dir / "launch.json").write_text(json.dumps(launch_summary, indent=2) + "\n", encoding="utf-8")
+        return launch_summary
+    except LaunchError as exc:
+        if not exc.launch_summary:
+            exc.launch_summary = launch_summary
+        raise
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+    launch_summary = launch_managed_run(args)
     print(json.dumps(launch_summary, indent=2))
     return 0
 

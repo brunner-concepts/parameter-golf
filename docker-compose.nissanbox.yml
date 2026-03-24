@@ -1,0 +1,26 @@
+services:
+  operator:
+    build:
+      context: .
+      dockerfile: ops/nissanbox/Dockerfile
+    working_dir: /workspace/parameter-golf
+    command:
+      - python3
+      - scripts/serve_run_control_dashboard.py
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8787"
+      - --live-root
+      - 11_RUN_CONTROL/live
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      RUN_NOTIFY_WEBHOOK_URL: ${RUN_NOTIFY_WEBHOOK_URL:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    volumes:
+      - .:/workspace/parameter-golf
+      - ${RUNPOD_HOME:-$HOME/.runpod}:/root/.runpod:ro
+      - ${RUNPODCTL_PATH:?set RUNPODCTL_PATH to the host runpodctl binary}:/usr/local/bin/runpodctl:ro
+    restart: unless-stopped

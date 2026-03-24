@@ -77,3 +77,33 @@ Treat local mirroring, summary generation, and optional notifications as part of
 1. Launches should use `scripts/launch_runpod_managed_run.py` where possible.
 2. `scripts/mirror_runpod_watchdog.py` should mirror `status.txt`, `current_state.json`, `heartbeat.json`, `terminal_result.json`, and the active log tail into `11_RUN_CONTROL/live/<run_id>/`.
 3. The next full 8x repro should not rely on pod-local files alone for progress visibility or post-mortem certainty.
+
+## 2026-03-23 — Nissanbox operator mode becomes the preferred control plane
+
+**Decision:**
+Implement a Nissanbox-centered operator loop: Docker-isolated supervisor, Telegram-capable mirroring, a private dashboard, and one automatic same-spec retry for infra/provider exits.
+
+**Rationale:**
+- The controller needs a durable, always-on host that is not this laptop.
+- The project benefits from automation at the execution layer, not at the research-direction layer.
+- One guarded retry on the same approved spec increases resilience without violating the compute-allocation rules.
+
+**Consequences:**
+1. Preferred entrypoint becomes `scripts/operator_supervisor.py`, not raw pod launch commands.
+2. `scripts/mirror_runpod_watchdog.py` now owns event history and Telegram/webhook notifications in addition to file mirroring.
+3. `scripts/serve_run_control_dashboard.py`, `docker-compose.nissanbox.yml`, and `ops/nissanbox/README.md` define the standard Nissanbox operator deployment.
+
+## 2026-03-24 — Supervisor retry path validated against provider-side pre-SSH failures
+
+**Decision:**
+Keep one automatic same-spec retry for infra/provider exits, and add short remote-launch retries inside a single pod before escalating to a full spec retry.
+
+**Rationale:**
+- A live smoke validation hit two provider-side failures before the watchdog could begin useful work: one pod never reached SSH readiness, and a second closed the first remote SSH command immediately after host-key acceptance.
+- The new supervisor correctly classified the first event as launch failure and scheduled the single allowed retry.
+- Launch resilience should improve inside the pod first before consuming the whole same-spec retry budget.
+
+**Consequences:**
+1. `scripts/launch_runpod_managed_run.py` should retry the initial remote watchdog launch a few times before giving up on the pod.
+2. Provider-side pre-SSH failures remain an infra risk, not a reason to change the research thesis.
+3. The next full repro should still use the Nissanbox operator path, but be interpreted with explicit awareness of provider readiness noise.

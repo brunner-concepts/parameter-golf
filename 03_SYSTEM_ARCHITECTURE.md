@@ -42,6 +42,7 @@ Owns: record eligibility checklist, concise PR description, logs/artifacts/plots
 Owns: pod-local phase execution, heartbeats, durable run state, failure capture, and next-command suggestions.
 Never auto-promotes to a more expensive compute tier. Never overrides the promotion gates.
 Pairs with a local mirror/notifier layer that copies run state off-pod so expensive runs remain observable even if the provider exits the machine.
+Recommended deployment target is an always-on Nissanbox container that owns RunPod launch, Telegram notifications, and the private dashboard.
 
 ## Execution phases
 
@@ -100,3 +101,10 @@ The local mirror additionally persists:
 - `11_RUN_CONTROL/live/<run_id>/summary.md`
 - `11_RUN_CONTROL/live/<run_id>/active_log.tail.txt`
 - `11_RUN_CONTROL/live/<run_id>/pod.json`
+- `11_RUN_CONTROL/live/<run_id>/events.jsonl`
+- `11_RUN_CONTROL/live/<run_id>/supervisor_state.json`
+
+The Nissanbox operator additionally owns:
+- `scripts/operator_supervisor.py` for same-spec infra retries
+- `scripts/serve_run_control_dashboard.py` for private status visualization
+- Telegram/webhook notifications for meaningful run transitions
