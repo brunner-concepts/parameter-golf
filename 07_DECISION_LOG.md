@@ -107,3 +107,18 @@ Keep one automatic same-spec retry for infra/provider exits, and add short remot
 1. `scripts/launch_runpod_managed_run.py` should retry the initial remote watchdog launch a few times before giving up on the pod.
 2. Provider-side pre-SSH failures remain an infra risk, not a reason to change the research thesis.
 3. The next full repro should still use the Nissanbox operator path, but be interpreted with explicit awareness of provider readiness noise.
+
+## 2026-03-24 — PR #414 managed smoke exposed a bad FlashAttention ref, not a model failure
+
+**Decision:**
+Treat the latest managed `repro_pr414_smoke` failure as a bootstrap-control-plane bug. Stop the pod immediately, pin FlashAttention to a real upstream commit, and rerun smoke on the same cheap compute tier before spending on 8x.
+
+**Rationale:**
+- The smoke run reached the pod-local watchdog and mirrored state correctly, so the autonomous control loop is now operational.
+- The terminal failure came from `scripts/bootstrap_runpod_env.sh` attempting `git checkout v3.0.0` inside `flash-attention`, but the upstream repo does not currently publish a `v3.0.0` tag.
+- This is execution drift in our bootstrap assumptions, not evidence against PR #414 or the broader research plan.
+
+**Consequences:**
+1. Pin `FLASH_ATTN_REF` in both PR #414 run specs and the bootstrap script to a real, reproducible upstream commit.
+2. Keep the research sequence unchanged: `#414 -> #508`, then only revisit Track A transfer work.
+3. Continue using low-cost smoke validation to clear infra bugs before any 8x H100 SXM spend.

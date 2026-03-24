@@ -7,7 +7,9 @@ REPO_URL=${REPO_URL:-https://github.com/brunner-concepts/parameter-golf.git}
 CHECKOUT_REF=${CHECKOUT_REF:-main}
 VENV_DIR=${VENV_DIR:-/workspace/pgolf-venv}
 FLASH_ATTN_ROOT=${FLASH_ATTN_ROOT:-/workspace/flash-attention}
-FLASH_ATTN_REF=${FLASH_ATTN_REF:-v3.0.0}
+# Pin a known FA3-capable upstream commit. The flash-attention repo currently
+# does not publish a v3.0.0 tag, so using that symbolic ref breaks bootstrap.
+FLASH_ATTN_REF=${FLASH_ATTN_REF:-6362bd3bcad059aa15fd993c6a9d5d1ee8a11418}
 FLASH_ATTN_MODE=${FLASH_ATTN_MODE:-auto}
 MAX_JOBS=${MAX_JOBS:-8}
 

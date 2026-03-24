@@ -13,7 +13,7 @@
     "REPO_DIR": "/workspace/parameter-golf",
     "VENV_DIR": "/workspace/pgolf-venv",
     "FLASH_ATTN_ROOT": "/workspace/flash-attention",
-    "FLASH_ATTN_REF": "v3.0.0",
+    "FLASH_ATTN_REF": "6362bd3bcad059aa15fd993c6a9d5d1ee8a11418",
     "FLASH_ATTN_MODE": "auto",
     "MAX_JOBS": "8",
     "DATA_VARIANT": "sp1024"
