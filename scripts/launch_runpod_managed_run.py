@@ -185,6 +185,8 @@ def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
     spec_path = Path(args.spec).resolve()
     spec = load_spec(spec_path)
     defaults = infer_defaults(spec)
+    remote_launch_retries = int(getattr(args, "remote_launch_retries", 3))
+    remote_launch_retry_delay = float(getattr(args, "remote_launch_retry_delay", 5.0))
 
     user = run_json(["runpodctl", "user"])
     min_balance = float(args.min_balance if args.min_balance is not None else defaults["min_balance"])
@@ -242,15 +244,15 @@ def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
         remote_spec_path = Path("/workspace/parameter-golf") / spec_rel
         remote_command = build_remote_launch_command(args.repo_ref, str(remote_spec_path), args.remote_state_dir, spec["run_id"])
         remote_error = None
-        for attempt in range(1, int(args.remote_launch_retries) + 1):
+        for attempt in range(1, remote_launch_retries + 1):
             try:
                 run_text(ssh_cmd + [remote_command])
                 remote_error = None
                 break
             except subprocess.CalledProcessError as exc:
                 remote_error = exc
-                if attempt < int(args.remote_launch_retries):
-                    time.sleep(float(args.remote_launch_retry_delay))
+                if attempt < remote_launch_retries:
+                    time.sleep(remote_launch_retry_delay)
                     continue
         if remote_error is not None:
             stop_pod_quietly(pod_id)

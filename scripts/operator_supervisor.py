@@ -111,6 +111,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mirror-interval", type=float, default=10.0)
     parser.add_argument("--mirror-log-lines", type=int, default=120)
     parser.add_argument("--wait-timeout", type=int, default=600)
+    parser.add_argument("--remote-launch-retries", type=int, default=3)
+    parser.add_argument("--remote-launch-retry-delay", type=float, default=5.0)
     parser.add_argument("--min-balance", type=float)
     parser.add_argument("--notify-macos", action="store_true")
     parser.add_argument("--webhook-url")
