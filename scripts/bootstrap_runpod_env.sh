@@ -10,6 +10,7 @@ FLASH_ATTN_ROOT=${FLASH_ATTN_ROOT:-/workspace/flash-attention}
 # Pin a known FA3-capable upstream commit. The flash-attention repo currently
 # does not publish a v3.0.0 tag, so using that symbolic ref breaks bootstrap.
 FLASH_ATTN_REF=${FLASH_ATTN_REF:-6362bd3bcad059aa15fd993c6a9d5d1ee8a11418}
+FLASH_ATTN_CACHE_TARBALL=${FLASH_ATTN_CACHE_TARBALL:-}
 FLASH_ATTN_MODE=${FLASH_ATTN_MODE:-auto}
 MAX_JOBS=${MAX_JOBS:-8}
 
@@ -46,12 +47,34 @@ source "${VENV_DIR}/bin/activate"
 
 python -m pip install --upgrade pip wheel packaging ninja zstandard
 
+SITE_PACKAGES=$(python - <<'PY'
+import sysconfig
+print(sysconfig.get_paths()["purelib"])
+PY
+)
+
 if python - <<'PY'
 import flash_attn_interface  # noqa: F401
+import zstandard  # noqa: F401
 print("flash_attn_interface already available")
 PY
 then
   exit 0
+fi
+
+if [[ -n "${FLASH_ATTN_CACHE_TARBALL}" && -f "${FLASH_ATTN_CACHE_TARBALL}" ]]; then
+  echo "restoring flash_attn artifacts from ${FLASH_ATTN_CACHE_TARBALL}"
+  mkdir -p "${SITE_PACKAGES}"
+  tar -xf "${FLASH_ATTN_CACHE_TARBALL}" -C "${SITE_PACKAGES}"
+  if python - <<'PY'
+import flash_attn_interface  # noqa: F401
+import zstandard  # noqa: F401
+print("flash_attn_interface restored from cache")
+PY
+  then
+    exit 0
+  fi
+  echo "cached flash_attn restore failed; falling back to source build" >&2
 fi
 
 if [[ "${FLASH_ATTN_MODE}" == "skip" ]]; then

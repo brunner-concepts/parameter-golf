@@ -10,3 +10,4 @@ data/docs_selected.jsonl
 .venv
 logs/
 11_RUN_CONTROL/live/
+11_RUN_CONTROL/cache/

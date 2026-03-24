@@ -113,6 +113,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--wait-timeout", type=int, default=600)
     parser.add_argument("--remote-launch-retries", type=int, default=3)
     parser.add_argument("--remote-launch-retry-delay", type=float, default=5.0)
+    parser.add_argument("--flash-attn-cache-tarball")
     parser.add_argument("--min-balance", type=float)
     parser.add_argument("--notify-macos", action="store_true")
     parser.add_argument("--webhook-url")

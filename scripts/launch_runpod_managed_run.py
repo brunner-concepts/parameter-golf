@@ -11,6 +11,7 @@ from typing import Any
 
 
 DEFAULT_TEMPLATE_ID = "y5cejece4j"
+DEFAULT_FLASH_ATTN_CACHE = "11_RUN_CONTROL/cache/flash_attn_3_py312_6362bd3.tar"
 COMPUTE_DEFAULTS = {
     "8xH100-SXM": {
         "gpu_id": "NVIDIA H100 80GB HBM3",
@@ -69,6 +70,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--wait-timeout", type=int, default=600)
     parser.add_argument("--remote-launch-retries", type=int, default=3)
     parser.add_argument("--remote-launch-retry-delay", type=float, default=5.0)
+    parser.add_argument("--flash-attn-cache-tarball")
     parser.add_argument("--min-balance", type=float)
     parser.add_argument("--notify-macos", action="store_true")
     parser.add_argument("--webhook-url")
@@ -107,11 +109,39 @@ def remote_ssh_cmd(pod: dict[str, Any]) -> list[str]:
     ]
 
 
+def remote_scp_cmd(pod: dict[str, Any]) -> list[str]:
+    ssh = pod["ssh"]
+    return [
+        "scp",
+        "-O",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "-i",
+        str(ssh["ssh_key"]["path"]),
+        "-P",
+        str(ssh["port"]),
+    ]
+
+
 def stop_pod_quietly(pod_id: str) -> None:
     subprocess.run(["runpodctl", "pod", "stop", pod_id], capture_output=True, text=True, check=False)
 
 
-def build_remote_launch_command(repo_ref: str, remote_spec_path: str, remote_state_dir: str, session_name: str) -> str:
+def build_remote_launch_command(
+    repo_ref: str,
+    remote_spec_path: str,
+    remote_state_dir: str,
+    session_name: str,
+    extra_env: dict[str, str] | None = None,
+) -> str:
+    env_prefix = ""
+    if extra_env:
+        env_prefix = " ".join(f"{key}={shlex_quote(value)}" for key, value in sorted(extra_env.items())) + " "
+    tmux_body = (
+        "cd /workspace/parameter-golf && "
+        f"{env_prefix}python3 scripts/run_watchdog.py run --state-dir {shlex_quote(remote_state_dir)} "
+        f"{shlex_quote(remote_spec_path)} | tee /workspace/{session_name}.log"
+    )
     return "\n".join(
         [
             "set -euo pipefail",
@@ -123,15 +153,29 @@ def build_remote_launch_command(repo_ref: str, remote_spec_path: str, remote_sta
             f"git pull --ff-only origin {repo_ref} || true",
             f"mkdir -p {remote_state_dir}",
             f"tmux kill-session -t {session_name} 2>/dev/null || true",
-            (
-                f"tmux new-session -d -s {session_name} "
-                f"\"cd /workspace/parameter-golf && "
-                f"python3 scripts/run_watchdog.py run --state-dir {remote_state_dir} {remote_spec_path} "
-                f"| tee /workspace/{session_name}.log\""
-            ),
+            f"tmux new-session -d -s {session_name} {shlex_quote(tmux_body)}",
             "tmux ls",
         ]
     )
+
+
+def shlex_quote(value: str) -> str:
+    import shlex
+
+    return shlex.quote(value)
+
+
+def resolve_flash_attn_cache(root: Path, args: argparse.Namespace) -> Path | None:
+    requested = getattr(args, "flash_attn_cache_tarball", None)
+    if requested:
+        cache_path = Path(requested).expanduser().resolve()
+        if not cache_path.exists():
+            raise LaunchError(f"FlashAttention cache tarball not found: {cache_path}")
+        return cache_path
+    default = (root / DEFAULT_FLASH_ATTN_CACHE).resolve()
+    if default.exists():
+        return default
+    return None
 
 
 def build_mirror_command(args: argparse.Namespace, pod_id: str, local_dir: Path) -> list[str]:
@@ -236,13 +280,40 @@ def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
     try:
         pod = wait_for_ssh(pod_id, args.wait_timeout)
         ssh_cmd = remote_ssh_cmd(pod)
+        scp_cmd = remote_scp_cmd(pod)
         try:
             spec_rel = spec_path.relative_to(root)
         except ValueError as exc:
             stop_pod_quietly(pod_id)
             raise LaunchError(f"Spec path {spec_path} must live under repo root {root}.", launch_summary) from exc
         remote_spec_path = Path("/workspace/parameter-golf") / spec_rel
-        remote_command = build_remote_launch_command(args.repo_ref, str(remote_spec_path), args.remote_state_dir, spec["run_id"])
+        extra_env: dict[str, str] = {}
+        cache_path = resolve_flash_attn_cache(root, args)
+        if cache_path is not None:
+            remote_cache_path = Path("/workspace") / cache_path.name
+            copy_proc = subprocess.run(
+                scp_cmd + [str(cache_path), f"root@{pod['ssh']['ip']}:{remote_cache_path}"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if copy_proc.returncode != 0:
+                stop_pod_quietly(pod_id)
+                details = copy_proc.stderr.strip() or copy_proc.stdout.strip() or f"scp exited {copy_proc.returncode}"
+                raise LaunchError(
+                    f"Failed to copy FlashAttention cache to pod {pod_id}: {details}",
+                    launch_summary,
+                )
+            extra_env["FLASH_ATTN_CACHE_TARBALL"] = str(remote_cache_path)
+            launch_summary["flash_attn_cache_tarball"] = str(cache_path)
+            launch_summary["remote_flash_attn_cache_tarball"] = str(remote_cache_path)
+        remote_command = build_remote_launch_command(
+            args.repo_ref,
+            str(remote_spec_path),
+            args.remote_state_dir,
+            spec["run_id"],
+            extra_env=extra_env,
+        )
         remote_error = None
         for attempt in range(1, remote_launch_retries + 1):
             try:
