@@ -224,6 +224,11 @@ def reset_live_dir(local_dir: Path) -> None:
             path.unlink()
 
 
+def write_launch_summary(local_dir: Path, launch_summary: dict[str, Any]) -> None:
+    local_dir.mkdir(parents=True, exist_ok=True)
+    (local_dir / "launch.json").write_text(json.dumps(launch_summary, indent=2) + "\n", encoding="utf-8")
+
+
 def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
     root = repo_root()
     spec_path = Path(args.spec).resolve()
@@ -231,6 +236,8 @@ def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
     defaults = infer_defaults(spec)
     remote_launch_retries = int(getattr(args, "remote_launch_retries", 3))
     remote_launch_retry_delay = float(getattr(args, "remote_launch_retry_delay", 5.0))
+    local_dir = root / "11_RUN_CONTROL" / "live" / spec["run_id"]
+    reset_live_dir(local_dir)
 
     user = run_json(["runpodctl", "user"])
     min_balance = float(args.min_balance if args.min_balance is not None else defaults["min_balance"])
@@ -275,12 +282,21 @@ def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
         "compute_tier": spec.get("compute_tier"),
         "gpu_id": gpu_id,
         "gpu_count": gpu_count,
+        "launch_phase": "pod_created",
     }
+    write_launch_summary(local_dir, launch_summary)
 
     try:
         pod = wait_for_ssh(pod_id, args.wait_timeout)
         ssh_cmd = remote_ssh_cmd(pod)
         scp_cmd = remote_scp_cmd(pod)
+        launch_summary.update(
+            {
+                "launch_phase": "ssh_ready",
+                "ssh_command": pod["ssh"]["ssh_command"],
+            }
+        )
+        write_launch_summary(local_dir, launch_summary)
         try:
             spec_rel = spec_path.relative_to(root)
         except ValueError as exc:
@@ -291,6 +307,14 @@ def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
         cache_path = resolve_flash_attn_cache(root, args)
         if cache_path is not None:
             remote_cache_path = Path("/workspace") / cache_path.name
+            launch_summary.update(
+                {
+                    "launch_phase": "copying_flash_attn_cache",
+                    "flash_attn_cache_tarball": str(cache_path),
+                    "remote_flash_attn_cache_tarball": str(remote_cache_path),
+                }
+            )
+            write_launch_summary(local_dir, launch_summary)
             copy_proc = subprocess.run(
                 scp_cmd + [str(cache_path), f"root@{pod['ssh']['ip']}:{remote_cache_path}"],
                 capture_output=True,
@@ -305,8 +329,8 @@ def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
                     launch_summary,
                 )
             extra_env["FLASH_ATTN_CACHE_TARBALL"] = str(remote_cache_path)
-            launch_summary["flash_attn_cache_tarball"] = str(cache_path)
-            launch_summary["remote_flash_attn_cache_tarball"] = str(remote_cache_path)
+            launch_summary["launch_phase"] = "flash_attn_cache_copied"
+            write_launch_summary(local_dir, launch_summary)
         remote_command = build_remote_launch_command(
             args.repo_ref,
             str(remote_spec_path),
@@ -314,6 +338,8 @@ def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
             spec["run_id"],
             extra_env=extra_env,
         )
+        launch_summary["launch_phase"] = "launching_remote_watchdog"
+        write_launch_summary(local_dir, launch_summary)
         remote_error = None
         for attempt in range(1, remote_launch_retries + 1):
             try:
@@ -330,9 +356,6 @@ def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
             details = remote_error.stderr.strip() or remote_error.stdout.strip() or str(remote_error)
             raise LaunchError(f"Remote watchdog launch failed on pod {pod_id}: {details}", launch_summary) from remote_error
 
-        local_dir = root / "11_RUN_CONTROL" / "live" / spec["run_id"]
-        local_dir.mkdir(parents=True, exist_ok=True)
-        reset_live_dir(local_dir)
         mirror_log = local_dir / "mirror.log"
         mirror_cmd = build_mirror_command(args, pod_id, local_dir)
         with mirror_log.open("a", encoding="utf-8") as handle:
@@ -350,11 +373,11 @@ def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
                 "mirror_pid": proc.pid,
                 "mirror_log": str(mirror_log.resolve()),
                 "local_dir": str(local_dir.resolve()),
-                "ssh_command": pod["ssh"]["ssh_command"],
                 "launched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "launch_phase": "active",
             }
         )
-        (local_dir / "launch.json").write_text(json.dumps(launch_summary, indent=2) + "\n", encoding="utf-8")
+        write_launch_summary(local_dir, launch_summary)
         return launch_summary
     except LaunchError as exc:
         if not exc.launch_summary:
