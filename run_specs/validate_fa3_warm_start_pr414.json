@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "run_id": "validate_fa3_warm_start_pr414",
+  "hypothesis": "The cached FlashAttention payload can restore cleanly on a fresh pod, eliminating the expensive source-build tax before the full PR #414 repro.",
+  "parent_branch": "repro/pr414",
+  "track": "B",
+  "compute_tier": "1xH100-smoke",
+  "auto_promote": false,
+  "promotion_gate": "Warm-start bootstrap must complete from cache before spending on the 8x H100 SXM repro.",
+  "env": {
+    "REPO_URL": "https://github.com/brunner-concepts/parameter-golf.git",
+    "CHECKOUT_REF": "main",
+    "REPO_DIR": "/workspace/parameter-golf",
+    "VENV_DIR": "/workspace/pgolf-venv",
+    "FLASH_ATTN_ROOT": "/workspace/flash-attention",
+    "FLASH_ATTN_REF": "6362bd3bcad059aa15fd993c6a9d5d1ee8a11418",
+    "FLASH_ATTN_MODE": "auto",
+    "MAX_JOBS": "8"
+  },
+  "phases": [
+    {
+      "id": "bootstrap_env",
+      "description": "Restore FlashAttention from the cached tarball and verify imports without rebuilding from source.",
+      "command": "bash scripts/bootstrap_runpod_env.sh",
+      "cwd": "${REPO_DIR}",
+      "log_name": "bootstrap_env.log",
+      "failure_summary": "Warm-start restore failed. Fix the cache or fallback path before spending on 8x."
+    }
+  ],
+  "success_summary": "FlashAttention warm-start restored successfully. It is now safe to spend on the full PR #414 repro.",
+  "manual_next_spec": "run_specs/repro_pr414_full.json",
+  "manual_next_command": "If warm-start bootstrap is clean, manually launch the full repro: python3 scripts/run_watchdog.py run run_specs/repro_pr414_full.json"
+}
