@@ -378,7 +378,7 @@
       "label": "std414",
       "pr": 414,
       "record_dir": "records/track_10min_16mb/2026-03-22_11L_EMA_GPTQ-lite_warmdown3500_QAT015_1.1233",
-      "state": "open",
+      "state": "closed",
       "submission": {
         "author": "Tianhao Wu",
         "blurb": "EMA(0.997) weight averaging + GPTQ-lite optimal clip percentile search + warmdown=3500 + Late QAT threshold=0.15, built on PR#374 stack (11L, XSA4, Partial RoPE 16/64, LN Scale, VE128, Tight SWA, SmearGate, BigramHash, int6+zstd-22).",
@@ -390,10 +390,10 @@
         "val_loss": 1.89576235
       },
       "title": "Record: 11L EMA + GPTQ-lite + warmdown3500 + QAT@0.15 (val_bpb=1.1233)",
-      "updated_at": "2026-03-22T07:48:40Z"
+      "updated_at": "2026-03-23T17:26:08Z"
     },
     {
-      "changed_files_total": 2,
+      "changed_files_total": 5,
       "changed_record_files": [
         "records/track_10min_16mb/2026-03-23_JoeProAI_SwiGLU_VE128_NoTTT/README.md",
         "records/track_10min_16mb/2026-03-23_JoeProAI_SwiGLU_VE128_NoTTT/train_gpt.py"
@@ -402,7 +402,7 @@
         "source": "pr_title",
         "value": 1.1181
       },
-      "commit_count": 1,
+      "commit_count": 2,
       "created_at": "2026-03-23T05:10:22Z",
       "downloaded_files": [
         "README.md",
@@ -414,7 +414,7 @@
         "ttt_eval": false
       },
       "head_ref": "joeproai/swiglu-ve128-nottt-1.1181",
-      "head_sha": "7366ee93df03e92f54c1c0f4200421352c76c71b",
+      "head_sha": "340a3a44a2dbe412d7f866930ad53b36665d2e41",
       "html_url": "https://github.com/openai/parameter-golf/pull/505",
       "hyperparameters": [
         {
@@ -763,480 +763,380 @@
       "label": "gepa505",
       "pr": 505,
       "record_dir": "records/track_10min_16mb/2026-03-23_JoeProAI_SwiGLU_VE128_NoTTT",
-      "state": "open",
+      "state": "closed",
       "submission": null,
       "title": "Record: SwiGLU+VE128+NoTTT val_bpb=1.1181 (3-seed mean)",
-      "updated_at": "2026-03-23T09:18:05Z"
+      "updated_at": "2026-03-26T15:58:56Z"
     },
     {
-      "changed_files_total": 103,
+      "changed_files_total": 8,
       "changed_record_files": [
-        "records/track_10min_16mb/2026-03-23_11L_GPTQ_TTT_EMA_QAT_1.1206/README.md",
-        "records/track_10min_16mb/2026-03-23_11L_GPTQ_TTT_EMA_QAT_1.1206/submission.json",
-        "records/track_10min_16mb/2026-03-23_11L_GPTQ_TTT_EMA_QAT_1.1206/train_gpt.py"
+        "records/track_10min_16mb/2026-03-26_Budgeted_TwoPass_Ngram_8xH100/README.md",
+        "records/track_10min_16mb/2026-03-26_Budgeted_TwoPass_Ngram_8xH100/final_model.research_export.pt",
+        "records/track_10min_16mb/2026-03-26_Budgeted_TwoPass_Ngram_8xH100/requirements.txt",
+        "records/track_10min_16mb/2026-03-26_Budgeted_TwoPass_Ngram_8xH100/submission.json",
+        "records/track_10min_16mb/2026-03-26_Budgeted_TwoPass_Ngram_8xH100/train_gpt.py",
+        "records/track_10min_16mb/2026-03-26_Budgeted_TwoPass_Ngram_8xH100/train_seed1337.log",
+        "records/track_10min_16mb/2026-03-26_Budgeted_TwoPass_Ngram_8xH100/train_seed2025.log",
+        "records/track_10min_16mb/2026-03-26_Budgeted_TwoPass_Ngram_8xH100/train_seed42.log"
       ],
       "claimed_bpb": {
         "source": "pr_title",
-        "value": 1.1215
+        "value": 0.11814796
       },
-      "commit_count": 108,
-      "created_at": "2026-03-23T06:02:59Z",
+      "commit_count": 2,
+      "created_at": "2026-03-26T16:45:38Z",
       "downloaded_files": [
         "README.md",
         "submission.json",
+        "requirements.txt",
         "train_gpt.py"
       ],
       "eval_modes": {
         "gptq": true,
-        "sliding_window": true,
-        "ttt_eval": true
+        "sliding_window": false,
+        "ttt_eval": false
       },
-      "head_ref": "submission/gptq-ttt-ema-1.1215",
-      "head_sha": "464f85912d1aa14ca0e1343f5d289cfc1b9c6218",
-      "html_url": "https://github.com/openai/parameter-golf/pull/508",
+      "head_ref": "submission-8x-autoresearch-ngram-budgeted",
+      "head_sha": "4ef9abf6631f13d9781d1fb91b3444dd4e2d63cc",
+      "html_url": "https://github.com/openai/parameter-golf/pull/868",
+      "hyperparameters": [],
+      "label": "ngram868",
+      "pr": 868,
+      "record_dir": "records/track_10min_16mb/2026-03-26_Budgeted_TwoPass_Ngram_8xH100",
+      "state": "open",
+      "submission": {
+        "artifact_bytes_max": 13436213,
+        "author": "Aamod Bhatt",
+        "blurb": "11L frontier_lean stack with legal score-first N-gram eval. Adds a budgeted two-pass tuner that auto-caps early-chunk rescoring to fit eval wallclock while preserving large pass1->pass2 gain. 3-seed mean val_bpb 0.118148 (seeds: 1337,42,2025).",
+        "date": "2026-03-26",
+        "eval_time_seconds_max": 468.68,
+        "github_id": "aamodbhatt",
+        "name": "Budgeted Two-Pass N-gram Backoff (3-seed)",
+        "seed_results": {
+          "1337": {
+            "bytes_total": 13422021,
+            "eval_s": 446.935,
+            "train_s": 600.088,
+            "val_bpb": 0.11819909
+          },
+          "2025": {
+            "bytes_total": 13430005,
+            "eval_s": 446.318,
+            "train_s": 600.067,
+            "val_bpb": 0.11811002
+          },
+          "42": {
+            "bytes_total": 13436213,
+            "eval_s": 468.68,
+            "train_s": 600.013,
+            "val_bpb": 0.11813478
+          }
+        },
+        "seeds": [
+          1337,
+          42,
+          2025
+        ],
+        "track": "track_10min_16mb",
+        "train_time_seconds_max": 600.088,
+        "val_bpb": 0.11814796,
+        "val_bpb_std": 3.754e-05
+      },
+      "title": "Record: Budgeted Two-Pass N-gram Backoff \u2014 val_bpb 0.11814796 (3-seed mean)",
+      "updated_at": "2026-03-26T17:05:11Z"
+    },
+    {
+      "changed_files_total": 8,
+      "changed_record_files": [
+        "records/track_10min_16mb/2026-03-27_CacheIsAllYouNeed_622KB_0.0887/README.md",
+        "records/track_10min_16mb/2026-03-27_CacheIsAllYouNeed_622KB_0.0887/log_seed1337.txt",
+        "records/track_10min_16mb/2026-03-27_CacheIsAllYouNeed_622KB_0.0887/log_seed42.txt",
+        "records/track_10min_16mb/2026-03-27_CacheIsAllYouNeed_622KB_0.0887/log_seed7.txt",
+        "records/track_10min_16mb/2026-03-27_CacheIsAllYouNeed_622KB_0.0887/ngram_cache.py",
+        "records/track_10min_16mb/2026-03-27_CacheIsAllYouNeed_622KB_0.0887/requirements.txt",
+        "records/track_10min_16mb/2026-03-27_CacheIsAllYouNeed_622KB_0.0887/submission.json",
+        "records/track_10min_16mb/2026-03-27_CacheIsAllYouNeed_622KB_0.0887/train_gpt.py"
+      ],
+      "claimed_bpb": {
+        "source": "pr_title",
+        "value": 0.0887
+      },
+      "commit_count": 1,
+      "created_at": "2026-03-27T00:12:28Z",
+      "downloaded_files": [
+        "README.md",
+        "submission.json",
+        "requirements.txt",
+        "train_gpt.py",
+        "ngram_cache.py"
+      ],
+      "eval_modes": {
+        "gptq": false,
+        "sliding_window": false,
+        "ttt_eval": false
+      },
+      "head_ref": "submission/2026-03-27-cache-is-all-you-need",
+      "head_sha": "64c9d07a00e618ebd4f74ee9b2e2d6f2a7ef4f58",
+      "html_url": "https://github.com/openai/parameter-golf/pull/913",
       "hyperparameters": [
         {
           "default": "\"./data/datasets/fineweb10B_sp1024\"",
           "env": "DATA_PATH",
-          "line": 28,
+          "line": 43,
           "name": "data_path"
         },
         {
           "default": "\"./data/tokenizers/fineweb_1024_bpe.model\"",
           "env": "TOKENIZER_PATH",
-          "line": 31,
+          "line": 46,
           "name": "tokenizer_path"
         },
         {
           "default": "str(uuid.uuid4())",
           "env": "RUN_ID",
-          "line": 32,
+          "line": 47,
           "name": "run_id"
         },
         {
           "default": "1337",
           "env": "SEED",
-          "line": 33,
+          "line": 48,
           "name": "seed"
         },
         {
           "default": "524_288",
           "env": "VAL_BATCH_SIZE",
-          "line": 34,
+          "line": 51,
           "name": "val_batch_size"
         },
         {
-          "default": "4000",
+          "default": "1000",
           "env": "VAL_LOSS_EVERY",
-          "line": 35,
+          "line": 52,
           "name": "val_loss_every"
         },
         {
-          "default": "500",
+          "default": "200",
           "env": "TRAIN_LOG_EVERY",
-          "line": 36,
+          "line": 53,
           "name": "train_log_every"
         },
         {
           "default": "20000",
           "env": "ITERATIONS",
-          "line": 37,
+          "line": 56,
           "name": "iterations"
         },
         {
-          "default": "3500",
+          "default": "1200",
           "env": "WARMDOWN_ITERS",
-          "line": 38,
+          "line": 57,
           "name": "warmdown_iters"
         },
         {
           "default": "20",
           "env": "WARMUP_STEPS",
-          "line": 39,
+          "line": 58,
           "name": "warmup_steps"
         },
         {
-          "default": "786_432",
+          "default": "524_288",
           "env": "TRAIN_BATCH_TOKENS",
-          "line": 40,
+          "line": 59,
           "name": "train_batch_tokens"
         },
         {
-          "default": "2048",
+          "default": "1024",
           "env": "TRAIN_SEQ_LEN",
-          "line": 41,
+          "line": 60,
           "name": "train_seq_len"
-        },
-        {
-          "default": "2048",
-          "env": "EVAL_SEQ_LEN",
-          "line": 42,
-          "name": "eval_seq_len"
         },
         {
           "default": "600.0",
           "env": "MAX_WALLCLOCK_SECONDS",
-          "line": 43,
+          "line": 61,
           "name": "max_wallclock_seconds"
         },
         {
           "default": "1.5",
           "env": "QK_GAIN_INIT",
-          "line": 44,
+          "line": 62,
           "name": "qk_gain_init"
         },
         {
           "default": "1024",
           "env": "VOCAB_SIZE",
-          "line": 45,
+          "line": 65,
           "name": "vocab_size"
         },
         {
-          "default": "11",
+          "default": "9",
           "env": "NUM_LAYERS",
-          "line": 46,
+          "line": 66,
           "name": "num_layers"
         },
         {
           "default": "4",
           "env": "NUM_KV_HEADS",
-          "line": 47,
+          "line": 67,
           "name": "num_kv_heads"
         },
         {
           "default": "512",
           "env": "MODEL_DIM",
-          "line": 48,
+          "line": 68,
           "name": "model_dim"
         },
         {
           "default": "8",
           "env": "NUM_HEADS",
-          "line": 49,
+          "line": 69,
           "name": "num_heads"
         },
         {
-          "default": "3.0",
+          "default": "2",
           "env": "MLP_MULT",
-          "line": 50,
+          "line": 70,
           "name": "mlp_mult"
         },
         {
           "default": "\"1\"",
           "env": "TIE_EMBEDDINGS",
-          "line": 51,
+          "line": 71,
           "name": "tie_embeddings"
         },
         {
           "default": "10000.0",
           "env": "ROPE_BASE",
-          "line": 52,
+          "line": 72,
           "name": "rope_base"
         },
         {
           "default": "30.0",
           "env": "LOGIT_SOFTCAP",
-          "line": 53,
+          "line": 73,
           "name": "logit_softcap"
         },
         {
           "default": "0.6",
           "env": "EMBED_LR",
-          "line": 54,
+          "line": 76,
           "name": "embed_lr"
         },
         {
           "default": "0.008",
           "env": "HEAD_LR",
-          "line": 55,
+          "line": 77,
           "name": "head_lr"
         },
         {
-          "default": "0.035",
+          "default": "0.05",
           "env": "TIED_EMBED_LR",
-          "line": 56,
+          "line": 78,
           "name": "tied_embed_lr"
         },
         {
           "default": "0.005",
           "env": "TIED_EMBED_INIT_STD",
-          "line": 57,
+          "line": 79,
           "name": "tied_embed_init_std"
         },
         {
-          "default": "0.025",
+          "default": "0.04",
           "env": "MATRIX_LR",
-          "line": 58,
+          "line": 80,
           "name": "matrix_lr"
         },
         {
-          "default": "0.025",
+          "default": "0.04",
           "env": "SCALAR_LR",
-          "line": 59,
+          "line": 81,
           "name": "scalar_lr"
         },
         {
-          "default": "0.99",
+          "default": "0.95",
           "env": "MUON_MOMENTUM",
-          "line": 60,
+          "line": 82,
           "name": "muon_momentum"
         },
         {
           "default": "5",
           "env": "MUON_BACKEND_STEPS",
-          "line": 61,
+          "line": 83,
           "name": "muon_backend_steps"
         },
         {
-          "default": "0.92",
+          "default": "0.85",
           "env": "MUON_MOMENTUM_WARMUP_START",
-          "line": 62,
+          "line": 84,
           "name": "muon_momentum_warmup_start"
         },
         {
-          "default": "1500",
+          "default": "500",
           "env": "MUON_MOMENTUM_WARMUP_STEPS",
-          "line": 63,
+          "line": 85,
           "name": "muon_momentum_warmup_steps"
         },
         {
           "default": "0.9",
           "env": "BETA1",
-          "line": 64,
+          "line": 86,
           "name": "beta1"
         },
         {
           "default": "0.95",
           "env": "BETA2",
-          "line": 65,
+          "line": 87,
           "name": "beta2"
         },
         {
           "default": "1e-8",
           "env": "ADAM_EPS",
-          "line": 66,
+          "line": 88,
           "name": "adam_eps"
         },
         {
-          "default": "0.3",
+          "default": "0.0",
           "env": "GRAD_CLIP_NORM",
-          "line": 67,
-          "name": "grad_clip_norm"
-        },
-        {
-          "default": "64",
-          "env": "EVAL_STRIDE",
-          "line": 68,
-          "name": "eval_stride"
-        },
-        {
-          "default": "0",
-          "env": "MTP_NUM_HEADS",
-          "line": 69,
-          "name": "mtp_num_heads"
-        },
-        {
-          "default": "0.2",
-          "env": "MTP_LOSS_WEIGHT",
-          "line": 70,
-          "name": "mtp_loss_weight"
-        },
-        {
-          "default": "0.95",
-          "env": "MUON_BETA2",
-          "line": 71,
-          "name": "muon_beta2"
-        },
-        {
-          "default": "\"1\"",
-          "env": "SWA_ENABLED",
-          "line": 72,
-          "name": "swa_enabled"
-        },
-        {
-          "default": "50",
-          "env": "SWA_EVERY",
-          "line": 73,
-          "name": "swa_every"
-        },
-        {
-          "default": "0.04",
-          "env": "MUON_WD",
-          "line": 74,
-          "name": "muon_wd"
-        },
-        {
-          "default": "0.04",
-          "env": "ADAM_WD",
-          "line": 75,
-          "name": "adam_wd"
-        },
-        {
-          "default": "\"0\"",
-          "env": "QAT_ENABLED",
-          "line": 76,
-          "name": "qat_enabled"
-        },
-        {
-          "default": "2048",
-          "env": "BIGRAM_VOCAB_SIZE",
-          "line": 77,
-          "name": "bigram_vocab_size"
-        },
-        {
-          "default": "128",
-          "env": "BIGRAM_DIM",
-          "line": 78,
-          "name": "bigram_dim"
-        },
-        {
-          "default": "4",
-          "env": "XSA_LAST_N",
-          "line": 79,
-          "name": "xsa_last_n"
-        },
-        {
-          "default": "16",
-          "env": "ROPE_DIMS",
-          "line": 80,
-          "name": "rope_dims"
-        },
-        {
-          "default": "\"1\"",
-          "env": "LN_SCALE",
-          "line": 81,
-          "name": "ln_scale"
-        },
-        {
-          "default": "\"0\"",
-          "env": "DTG_ENABLED",
-          "line": 82,
-          "name": "dtg_enabled"
-        },
-        {
-          "default": "0.5",
-          "env": "LATE_QAT_THRESHOLD",
-          "line": 83,
-          "name": "late_qat_threshold"
-        },
-        {
-          "default": "\"1\"",
-          "env": "VE_ENABLED",
-          "line": 84,
-          "name": "ve_enabled"
-        },
-        {
-          "default": "128",
-          "env": "VE_DIM",
-          "line": 85,
-          "name": "ve_dim"
-        },
-        {
-          "default": "\"9,10\"",
-          "env": "VE_LAYERS",
-          "line": 86,
-          "name": "ve_layers"
-        },
-        {
-          "default": "\"1\"",
-          "env": "TTT_EVAL_ENABLED",
-          "line": 88,
-          "name": "ttt_eval_enabled"
-        },
-        {
-          "default": "0.002",
-          "env": "TTT_LR",
           "line": 89,
-          "name": "ttt_lr"
-        },
-        {
-          "default": "3",
-          "env": "TTT_EPOCHS",
-          "line": 90,
-          "name": "ttt_epochs"
-        },
-        {
-          "default": "32768",
-          "env": "TTT_CHUNK_TOKENS",
-          "line": 91,
-          "name": "ttt_chunk_tokens"
-        },
-        {
-          "default": "2",
-          "env": "TTT_FREEZE_BLOCKS",
-          "line": 92,
-          "name": "ttt_freeze_blocks"
-        },
-        {
-          "default": "0.9",
-          "env": "TTT_MOMENTUM",
-          "line": 93,
-          "name": "ttt_momentum"
-        },
-        {
-          "default": "32",
-          "env": "TTT_BATCH_SEQS",
-          "line": 94,
-          "name": "ttt_batch_seqs"
-        },
-        {
-          "default": "1.0",
-          "env": "TTT_GRAD_CLIP",
-          "line": 95,
-          "name": "ttt_grad_clip"
-        },
-        {
-          "default": "200",
-          "env": "TTT_MAX_TRAIN_CHUNKS",
-          "line": 96,
-          "name": "ttt_max_train_chunks"
-        },
-        {
-          "default": "0.995",
-          "env": "TTT_EMA_DECAY",
-          "line": 97,
-          "name": "ttt_ema_decay"
-        },
-        {
-          "default": "\"1\"",
-          "env": "TTT_FREEZE_EMBED",
-          "line": 98,
-          "name": "ttt_freeze_embed"
+          "name": "grad_clip_norm"
         }
       ],
-      "label": "ttt508",
-      "pr": 508,
-      "record_dir": "records/track_10min_16mb/2026-03-23_11L_GPTQ_TTT_EMA_QAT_1.1206",
+      "label": "cache913",
+      "pr": 913,
+      "record_dir": "records/track_10min_16mb/2026-03-27_CacheIsAllYouNeed_622KB_0.0887",
       "state": "open",
       "submission": {
-        "author": "frosty40",
-        "bytes_total": 15564772,
-        "description": "11L/512d/8H/4KV/3xMLP + GPTQ (Hessian-aware int6 with column reordering) + early QAT (percentile-matched clipping) + legal score-first TTT with EMA scoring (3-seed mean val_bpb: 1.1215)",
-        "github_id": "newjordan",
-        "mean_val_bpb": 1.12150756,
-        "model_name": "11L_GPTQ_EarlyQAT_TTT_EMA",
-        "seed": 1337,
-        "seeds": {
+        "author": "royi",
+        "code_bytes": 63357,
+        "date": "2026-03-27",
+        "github": "RoyiRa",
+        "mean_val_bpb": 0.08872228,
+        "mean_val_loss": 0.14980366,
+        "name": "Cache Is All You Need: 622KB artifact, 0.0887 BPB",
+        "note": "Competition baseline train_gpt.py (1126 lines) + ngram_cache.py (295 lines). 2L 128d vanilla GPT. 96% of 16MB budget unused.",
+        "seed_results": {
           "1337": {
-            "val_bpb": 1.12059684,
-            "val_loss": 1.89207582
+            "artifact_bytes": 621760,
+            "val_bpb": 0.08833078,
+            "val_loss": 0.14914263
           },
           "42": {
-            "val_bpb": 1.12178348,
-            "val_loss": 1.89407941
+            "artifact_bytes": 621760,
+            "val_bpb": 0.08914528,
+            "val_loss": 0.15051787
           },
           "7": {
-            "val_bpb": 1.12214237,
-            "val_loss": 1.89468537
+            "artifact_bytes": 621760,
+            "val_bpb": 0.08869079,
+            "val_loss": 0.14975049
           }
         },
-        "std_val_bpb": 0.00082,
-        "track": "10min_16mb",
-        "val_bpb": 1.12059684,
-        "val_loss": 1.89207582
+        "track": "10min_16mb"
       },
-      "title": "GPTQ + Early QAT + Legal TTT \u2014 3-seed mean val_bpb 1.1215",
-      "updated_at": "2026-03-23T06:03:14Z"
+      "title": "Record: Cache Is All You Need \u2014 val_bpb 0.0887, 622KB artifact (3-seed mean)",
+      "updated_at": "2026-03-27T04:54:23Z"
     }
   ]
 }

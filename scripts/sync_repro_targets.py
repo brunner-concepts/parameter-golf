@@ -26,10 +26,15 @@ TARGETS: dict[int, dict[str, Any]] = {
         "record_dir": "records/track_10min_16mb/2026-03-23_JoeProAI_SwiGLU_VE128_NoTTT",
         "files": ["README.md", "train_gpt.py"],
     },
-    508: {
-        "label": "ttt508",
-        "record_dir": "records/track_10min_16mb/2026-03-23_11L_GPTQ_TTT_EMA_QAT_1.1206",
-        "files": ["README.md", "submission.json", "train_gpt.py"],
+    868: {
+        "label": "ngram868",
+        "record_dir": "records/track_10min_16mb/2026-03-26_Budgeted_TwoPass_Ngram_8xH100",
+        "files": ["README.md", "submission.json", "requirements.txt", "train_gpt.py"],
+    },
+    913: {
+        "label": "cache913",
+        "record_dir": "records/track_10min_16mb/2026-03-27_CacheIsAllYouNeed_622KB_0.0887",
+        "files": ["README.md", "submission.json", "requirements.txt", "train_gpt.py", "ngram_cache.py"],
     },
 }
 
@@ -247,7 +252,7 @@ def sync_target(pr_number: int, spec: dict[str, Any], out_dir: Path) -> dict[str
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Sync exact upstream record files for the mandatory reproduction targets."
+        description="Sync exact upstream record files for the active reproduction targets."
     )
     parser.add_argument(
         "--out-dir",
