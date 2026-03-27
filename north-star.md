@@ -39,9 +39,9 @@ The real asset is not a single experiment. It is a research loop that preserves 
 
 ## Current primary thesis
 
-The strongest legal path is likely: start from the strongest non-TTT base (#505, GEPA, 1.1181), add only legal score-first evaluation adaptation, and package fast enough to win chronology.
+The strongest legal path is now likely an eval-cache route: a tiny baseline model plus a strictly backward-looking n-gram / phrase cache evaluated score-first, as in the March 27 `#913` / `#868` family.
 
-Public evidence: #505 is the strongest non-TTT frontier. Legal TTT already transfers on standard bases (#508 at 1.1215, #503 at 1.1218, #473 at 1.1220). GEPA + legal TTT has not been attempted yet — that is the gap.
+Public evidence: the live record-eligible frontier dropped from the `1.11x` neural/TTT regime to `0.0887` with a 622 KB artifact. Pure neural architecture work is no longer the shortest accepted-record route. GEPA + legal TTT remains a longer-shot research lane, not the immediate chronology-maximizing path.
 
 ## Track allocation
 

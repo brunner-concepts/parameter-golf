@@ -153,3 +153,33 @@ Adjust research sequencing, not away from the `#414` family, but away from stale
 1. Update project memory so future sessions do not optimize against the stale `1.1428` / `#508` frontier.
 2. Keep the next compute action unchanged: use the FA warm-start to run the full managed `#414` repro.
 3. After `#414` repro, prioritize accepted-stack / live-frontier Track B work (`#549`, `#606`, `#615`, `#634`) ahead of historical `#508` hardening.
+
+## 2026-03-25 — FlashAttention warm-start is validated
+
+**Decision:**
+Treat FlashAttention warm-start as solved enough for expensive runs. Do not spend more engineering time on source-build avoidance unless it directly improves the cache-route execution loop.
+
+**Rationale:**
+- The managed `validate_fa3_warm_start_pr414` run completed successfully on 1x H100 PCIe.
+- Bootstrap finished in `345.076s`, down from the prior `7709.693s` source-build path.
+- The remote log showed `flash_attn_interface already available`, which confirms the cached payload restored correctly.
+
+**Consequences:**
+1. The FlashAttention bootstrap tax is no longer a reason to delay serious runs.
+2. Future infra work must justify itself against the new frontier, not against the old `#414` blocker.
+3. The validation pod should be stopped immediately after terminal completion to avoid idle burn.
+
+## 2026-03-27 — The cache frontier supersedes pure-neural work as the shortest winning route
+
+**Decision:**
+Pause `#414` full reproduction as the default next action and pivot the project’s highest-priority lane toward reproducing a record-eligible backward-looking cache path in the `#868` / `#913` family.
+
+**Rationale:**
+- Issue `#140` was updated on March 26, 2026 and reports a live record-eligible frontier of `0.0887` on PR `#913`, with several additional cache submissions in the `0.0935–0.1181` range.
+- PR `#913` claims a `622 KB` artifact, `122s` train time, and `403s` eval time with only a tiny baseline model plus an eval-time cache layer.
+- Against that frontier, a faithful `#414` repro at `1.1233` is no longer a serious route to an accepted record. It remains useful only as a fallback engineering anchor.
+
+**Consequences:**
+1. Project memory must stop describing `#414 -> #549/#606/#615` as the shortest winning Track B route.
+2. Highest-priority reproduction work becomes exact upstream sync and evaluation of conservative, record-eligible cache methods.
+3. Pure-neural lanes (`#414`, `#505`, GEPA + TTT, micro-deltas) should remain paused unless they directly support the cache route or a packaging fallback.

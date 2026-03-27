@@ -6,9 +6,9 @@ Ship the earliest legally defensible PR that is accepted as the new official rec
 
 ## Current target to beat
 
-Official SOTA: **1.1194 BPB** (abaybektursun, PR #549, merged March 24, 2026)
-Best pending non-TTT: **1.1171 BPB** (#634, XSA-all + Full GPTQ + Parallel Muon + Selective Pruning, 3-seed)
-Best pending legal TTT: **1.1162 BPB** (#606, int5 GPTQ + Soft-Round QAT + legal TTT, 3-seed)
+Official SOTA: **1.1194 BPB** (PR #549, merged March 24, 2026)
+Best pending record-eligible submission: **0.0887 BPB** (#913, Cache Is All You Need, 3-seed mean, March 27, 2026)
+Best conservative stepping-stone cache submission: **0.1181 BPB** (#868, Budgeted Two-Pass N-gram Backoff)
 
 To land an accepted record, the submission must beat the official SOTA by ≥0.005 nats at p < 0.01.
 
@@ -16,20 +16,21 @@ To land an accepted record, the submission must beat the official SOTA by ≥0.0
 
 | Track | Allocation | Target | Status |
 |-------|-----------|--------|--------|
-| **A: GEPA + legal TTT** | 60% | Port legal score-first TTT onto #505 GEPA base | Not started |
-| **B: accepted-stack hardening** | 30% | Reproduce #414, then target the accepted #549 / live #606-#615 frontier | Smoke operational; full repro pending |
-| **C: Micro-deltas** | 10% | Tiny additions with near-zero latency/byte cost | Not started |
+| **A: record-eligible eval cache** | 70% | Reproduce a score-first n-gram / phrase cache path in the `#868` / `#913` family | Not started |
+| **B: control-plane + fallback neural anchor** | 20% | Keep the watchdog, mirroring, and warm-start path reliable; use `#414` only as a fallback anchor if still needed | Warm-start validated; full repro paused |
+| **C: longer-shot neural research** | 10% | GEPA + legal TTT or tiny micro-deltas only after the cache route is understood | Not started |
 
 ## Top 3 hypotheses
 
-1. The shortest official-track route now runs through the accepted #549 family or the live #606/#615 variants, not historical #508 alone (Track B).
-2. Legal score-first TTT on GEPA still offers the largest upside, but only if it transfers without paying too much throughput or byte tax (Track A).
-3. Full GPTQ can be competitive, but only if calibration is cleanly inside the allowed budget; otherwise it risks non-record reclassification (#609 lesson).
+1. The shortest accepted-record route now runs through a record-eligible backward-looking cache path (`#913`, `#888`, `#868` lineage), not further pure-neural tuning.
+2. The current control plane is good enough to support serious runs: watchdog, mirroring, and FlashAttention warm-start are no longer the main blockers.
+3. Aggressive full-rescore cache variants can win raw BPB but may face legality scrutiny; conservative score-first cache paths may maximize acceptance probability.
 
 ## Stop/go rules
 
 - **STOP** any branch where single-seed fails to beat parent by ≥0.001 BPB
 - **STOP** any branch where step time increases >5% without compensating BPB gain
 - **STOP** any branch where artifact exceeds 15.9 MB after packaging
+- **STOP** spending more on pure-neural `#414` reproduction as a record path unless it directly informs the cache route or packaging
 - **GO** to 3-seed only when single-seed clears promotion threshold
 - **GO** to PR packaging immediately when 3-seed mean clears accepted-record territory
