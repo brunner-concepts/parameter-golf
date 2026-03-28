@@ -1140,9 +1140,9 @@ def executive_diagnosis(
         )
     if queue_state.get("blocked") and queue_state.get("blocked_reason") == "pr868_full_already_complete":
         return (
-            "pr868_full_complete_review",
-            "PR #868 full repro is complete and the operator is intentionally paused for result review.",
-            "Write the structured result, compare it against the claimed PR score and legality posture, then decide whether to investigate the reproduction mismatch or pivot to #913/#933.",
+            "pr868_eval_surface_review",
+            "PR #868 full repro is complete, and the leading diagnosis is eval-surface drift rather than base-model mismatch.",
+            "Keep the queue paused, pin the exact challenge manifest and validation-shard surface, then rerun #868 only after that evidence path is in place.",
         )
     if queue_state.get("next_run_id"):
         return (

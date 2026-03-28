@@ -260,3 +260,20 @@ Treat the first full provider-staged `#868` run as a major operational success a
 1. Patch the operator so successful terminal runs trigger pod teardown and stale terminal-complete pods are reconciled automatically.
 2. Write a structured result report for `repro_pr868_full` and update experiment memory immediately.
 3. Do **not** auto-promote to `#913` or `#933` yet. First explain why this run differs so far from the published `#868` claim, then decide whether the next action is config reconciliation, rerun, or target pivot.
+
+## 2026-03-28 — PR #868 mismatch is most likely an eval-surface drift problem
+
+**Decision:**
+Do not submit a PR or spend another blind 8x run on `#868` yet. Treat the current divergence as an eval-surface parity problem and make manifest/shard capture the next required step.
+
+**Rationale:**
+- The newly synced upstream seed logs confirm the published result is real: all three seed logs report `237` n-gram chunks and exact scores around `0.1181`.
+- Our full repro matches the upstream base-model path closely: step time, diagnostic post-average BPB, roundtrip exact BPB, and artifact size are all near the upstream seed-1337 log.
+- The divergence is isolated to the two-pass cache evaluator: our run saw `63` chunks and tuned to `47`, while the upstream seed-1337 log saw `237` chunks and tuned to the full `72`.
+- In `third_party/upstream_prs/pr868/train_gpt.py`, `n_chunks` is derived directly from `total_tokens` and `NGRAM_EVAL_CHUNK_TOKENS`, so the `63` vs `237` split implies a materially different evaluation token surface.
+- The challenge-data downloader `data/cached_challenge_fineweb.py` pulls the current Hugging Face dataset repo head and manifest, not a snapshot pinned to the PR. That makes data/manifest drift the leading explanation.
+
+**Consequences:**
+1. Add an audit report for `repro_pr868_mismatch_audit` and keep `#868` in review until data/eval parity is proven.
+2. Make future cache repros capture the challenge manifest and validation shard inventory into run artifacts.
+3. Do not cite `0.09749802` as a validated reproduction or competition-ready result; it is a strong internal signal, not a packaged submission.

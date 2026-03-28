@@ -43,6 +43,15 @@ def read_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def read_json_if_present(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        return read_json(path)
+    except json.JSONDecodeError:
+        return {}
+
+
 def run_json(cmd: list[str]) -> dict[str, Any]:
     proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
     return json.loads(proc.stdout)
@@ -60,6 +69,21 @@ def shutil_which(command: str) -> str | None:
         text=True,
         check=True,
     ).stdout.strip() or None
+
+
+def load_local_snapshot(local_dir: Path) -> dict[str, Any]:
+    return {
+        "status_txt": (local_dir / "status.txt").read_text(encoding="utf-8") if (local_dir / "status.txt").exists() else "",
+        "next_action_txt": (local_dir / "next_action.txt").read_text(encoding="utf-8")
+        if (local_dir / "next_action.txt").exists()
+        else "",
+        "current_state": read_json_if_present(local_dir / "current_state.json"),
+        "heartbeat": read_json_if_present(local_dir / "heartbeat.json"),
+        "terminal_result": read_json_if_present(local_dir / "terminal_result.json"),
+        "active_log_tail": (local_dir / "active_log.tail.txt").read_text(encoding="utf-8")
+        if (local_dir / "active_log.tail.txt").exists()
+        else "",
+    }
 
 
 def maybe_notify_macos(title: str, body: str) -> None:
@@ -354,24 +378,25 @@ def main() -> int:
         else:
             last_error = ssh_info.get("error", "") if isinstance(ssh_info, dict) else ""
 
-        classification = classify_state(pod, remote, last_error)
+        effective_remote = remote if remote is not None else load_local_snapshot(local_dir)
+        classification = classify_state(pod, effective_remote, last_error)
         mirror_state = {
             "mirrored_at": utc_now(),
             "pod_status": desired_status,
             "last_error": last_error,
             "classification": classification,
-            "event_key": event_key(pod, remote, classification, last_error),
+            "event_key": event_key(pod, effective_remote, classification, last_error),
         }
         write_mirror_files(local_dir, pod, remote, mirror_state)
-        atomic_write_text(local_dir / "summary.md", build_summary(pod, remote, mirror_state))
+        atomic_write_text(local_dir / "summary.md", build_summary(pod, effective_remote, mirror_state))
 
         previous_key = prior_state.get("event_key")
         if mirror_state["event_key"] != previous_key:
-            event_payload = build_event_payload(pod, remote, mirror_state)
+            event_payload = build_event_payload(pod, effective_remote, mirror_state)
             append_jsonl(event_history_path, event_payload)
-            current = (remote or {}).get("current_state") or {}
+            current = effective_remote.get("current_state") or {}
             title = f"RunPod {args.pod_id}: {mirror_state['classification']}"
-            body = notification_body(pod, remote, mirror_state)
+            body = notification_body(pod, effective_remote, mirror_state)
             if args.notify_macos:
                 maybe_notify_macos(title, body)
             maybe_notify_webhook(args.webhook_url, title, body)

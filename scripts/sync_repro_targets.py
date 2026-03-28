@@ -29,7 +29,15 @@ TARGETS: dict[int, dict[str, Any]] = {
     868: {
         "label": "ngram868",
         "record_dir": "records/track_10min_16mb/2026-03-26_Budgeted_TwoPass_Ngram_8xH100",
-        "files": ["README.md", "submission.json", "requirements.txt", "train_gpt.py"],
+        "files": [
+            "README.md",
+            "submission.json",
+            "requirements.txt",
+            "train_gpt.py",
+            "train_seed1337.log",
+            "train_seed42.log",
+            "train_seed2025.log",
+        ],
     },
     913: {
         "label": "cache913",

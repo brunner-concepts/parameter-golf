@@ -790,7 +790,10 @@
         "README.md",
         "submission.json",
         "requirements.txt",
-        "train_gpt.py"
+        "train_gpt.py",
+        "train_seed1337.log",
+        "train_seed42.log",
+        "train_seed2025.log"
       ],
       "eval_modes": {
         "gptq": true,
