@@ -20,6 +20,7 @@ from typing import Any
 API_ROOT = "https://api.github.com/repos/openai/parameter-golf"
 USER_AGENT = "openai-project-golf-control-plane/1.0"
 ACTIVE_RUN_STATUSES = {"starting", "running", "dry-run"}
+TERMINAL_STATUSES = {"complete", "failed", "dry-run-complete"}
 COST_ESTIMATES = {
     "1xH100-smoke": 2.39,
     "8xH100-SXM": 21.52,
