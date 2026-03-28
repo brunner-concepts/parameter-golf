@@ -258,6 +258,21 @@ Treat the first full provider-staged `#868` run as a major operational success a
 
 **Consequences:**
 1. Patch the operator so successful terminal runs trigger pod teardown and stale terminal-complete pods are reconciled automatically.
+
+## 2026-03-28 — PR #868 parity rerun failed in pinned-manifest bootstrap, not model execution
+
+**Decision:**
+Treat the first pinned-manifest `#868` parity rerun failure as a deterministic data-bootstrap bug and rerun the same campaign immediately after patching the path resolution.
+
+**Rationale:**
+- The rerun did launch autonomously on `8x H100 SXM`, and the pod reached `bootstrap_env` and `install_requirements` successfully.
+- The failure occurred in `prepare_data` before any model execution, because `MATCHED_FINEWEB_MANIFEST_PATH` was handed through as the literal string `${REPO_DIR}/...` instead of a resolved pod-local path.
+- This is the exact kind of preflight failure that should not widen the search space or change the target. The correct response is to repair the bootstrap path and rerun `#868` on the same bounded campaign.
+
+**Consequences:**
+1. Expand pinned-manifest override paths before the downloader reads them.
+2. Regenerate the parity spec with an absolute manifest path instead of a literal `${REPO_DIR}` placeholder.
+3. Preserve the campaign focus on `#868`; do not pivot to `#913` or `#933` because of a bootstrap-only failure.
 2. Write a structured result report for `repro_pr868_full` and update experiment memory immediately.
 3. Do **not** auto-promote to `#913` or `#933` yet. First explain why this run differs so far from the published `#868` claim, then decide whether the next action is config reconciliation, rerun, or target pivot.
 

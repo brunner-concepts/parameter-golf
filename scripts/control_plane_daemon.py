@@ -757,7 +757,7 @@ def build_pr868_specs(generated_root: Path) -> dict[str, Path]:
         surface = read_json_if_exists(surface_path)
         parity_env.update(
             {
-                "MATCHED_FINEWEB_MANIFEST_PATH": "${REPO_DIR}/11_RUN_CONTROL/control_plane/data_surfaces/pr868_manifest_snapshot.json",
+                "MATCHED_FINEWEB_MANIFEST_PATH": f"{env['REPO_DIR']}/11_RUN_CONTROL/control_plane/data_surfaces/pr868_manifest_snapshot.json",
                 "MATCHED_FINEWEB_REVISION": str(surface.get("repo_revision", "")),
                 "MATCHED_FINEWEB_REPO_ID": str(surface.get("repo_id", "willdepueoai/parameter-golf")),
                 "MATCHED_FINEWEB_REMOTE_ROOT_PREFIX": str(surface.get("remote_root_prefix", "datasets")),

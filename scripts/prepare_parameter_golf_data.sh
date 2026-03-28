@@ -35,6 +35,9 @@ variant = os.environ.get("DATA_VARIANT", "sp1024")
 train_shards_requested = os.environ.get("TRAIN_SHARDS") or None
 manifest_path = repo_dir / "data" / "manifest.json"
 manifest_override_path = os.environ.get("MATCHED_FINEWEB_MANIFEST_PATH")
+if manifest_override_path:
+    manifest_override_path = os.path.expandvars(manifest_override_path)
+    manifest_override_path = os.path.expanduser(manifest_override_path)
 manifest_source_path = Path(manifest_override_path) if manifest_override_path else manifest_path
 datasets_root = repo_dir / "data" / "datasets"
 

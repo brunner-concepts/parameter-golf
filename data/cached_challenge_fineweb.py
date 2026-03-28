@@ -135,6 +135,9 @@ def main() -> None:
     global REPO_REVISION, MANIFEST_OVERRIDE_PATH
     REPO_REVISION = args.repo_revision or None
     MANIFEST_OVERRIDE_PATH = args.manifest_path or None
+    if MANIFEST_OVERRIDE_PATH:
+        MANIFEST_OVERRIDE_PATH = os.path.expandvars(MANIFEST_OVERRIDE_PATH)
+        MANIFEST_OVERRIDE_PATH = os.path.expanduser(MANIFEST_OVERRIDE_PATH)
     dataset_dir = dataset_dir_for_variant(args.variant)
     train_shards = args.train_shards_positional if args.train_shards_positional is not None else args.train_shards
     if train_shards < 0:
