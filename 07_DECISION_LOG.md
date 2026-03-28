@@ -323,3 +323,19 @@ Activate the final self-funded `#868` parity campaign immediately instead of wai
 1. Update the tracked campaign activation time and baseline balance to “now”.
 2. Apply a one-time runtime cap override high enough to let the final campaign start immediately, while leaving the `$100` campaign envelope as the real stop condition.
 3. Launch only the pinned-manifest `repro_pr868_parity_full` path and stop new compute again once that campaign resolves.
+
+## 2026-03-28 — PR #868 pinned-manifest parity rerun confirms persistent divergence
+
+**Decision:**
+Treat the pinned-manifest `#868` rerun as milestone-resolving evidence, not as a submission candidate. Stop the self-funded parity campaign and move the project from 'pin the surface' to 'persistent divergence after pinned replay.'
+
+**Rationale:**
+- The rerun completed end-to-end on `8x H100 SXM` and still landed at `0.09674850` exact n-gram BPB, not near the upstream seed-1337 `0.11819909`.
+- The frozen rerun still saw `63` total n-gram chunks and tuned `50` chunks, versus upstream `237` and `72`.
+- That means the prior diagnosis was incomplete: pinning the manifest and HF revision did not collapse the gap. The remaining divergence is deeper than the originally suspected moving-manifest surface.
+
+**Consequences:**
+1. Stop automatic `#868` replay spending under the final self-funded campaign.
+2. Keep competition PR packaging blocked; the result is still not an understood reproduction.
+3. Update the grant narrative to reflect stronger evidence: the operator completed a frozen-surface parity rerun and narrowed the unresolved gap further.
+4. The next strategic choice is no longer 'rerun blindly.' It is either deeper hidden-surface forensics or a pivot to the next conservative cache lineage target with the now-proven operator stack.
