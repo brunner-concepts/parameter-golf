@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
-import tempfile
 import time
 import urllib.parse
 import urllib.request
@@ -187,13 +186,6 @@ def build_live_context(root: Path, live_root: Path) -> str:
 
 
 def build_prompt(root: Path, live_root: Path, transcript: list[dict[str, str]], user_text: str) -> str:
-    recent = transcript[-8:]
-    transcript_lines: list[str] = []
-    for item in recent:
-        role = item.get("role", "user")
-        text = item.get("text", "")
-        transcript_lines.append(f"{role.upper()}: {text}")
-    transcript_block = "\n".join(transcript_lines) if transcript_lines else "(none)"
     live_context = build_live_context(root, live_root)
     return "\n".join(
         [
@@ -204,12 +196,10 @@ def build_prompt(root: Path, live_root: Path, transcript: list[dict[str, str]], 
             "If the user asks for strategy or judgment, answer like a pragmatic operator/CEO.",
             "If the user asks to take an action, you may describe the recommended action, but do not claim it already happened.",
             "If the user asks how things are going, synthesize the current run state and next decision point.",
+            "This chat is persistent. Use prior conversation context naturally.",
             "",
             "LIVE STATE",
             live_context,
-            "",
-            "RECENT CHAT",
-            transcript_block,
             "",
             f"NEW USER MESSAGE\nUSER: {user_text}",
             "",
@@ -218,29 +208,62 @@ def build_prompt(root: Path, live_root: Path, transcript: list[dict[str, str]], 
     )
 
 
-def run_codex_reply(root: Path, prompt: str) -> str:
-    with tempfile.NamedTemporaryFile(prefix="pgolf-telegram-reply-", suffix=".txt", delete=False) as output_file:
-        output_path = Path(output_file.name)
-    try:
-        cmd = [
-            "codex",
-            "exec",
-            "-C",
-            str(root),
-            "--skip-git-repo-check",
-            "-s",
-            "read-only",
-            "-m",
-            "gpt-5.4",
-            "-o",
-            str(output_path),
-            prompt,
-        ]
-        subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=180)
-        reply = output_path.read_text(encoding="utf-8").strip()
-        return reply or "I do not have a useful reply yet."
-    finally:
-        output_path.unlink(missing_ok=True)
+def parse_codex_jsonl(stdout: str) -> tuple[str | None, str | None]:
+    thread_id: str | None = None
+    reply: str | None = None
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if obj.get("type") == "thread.started":
+            thread_id = obj.get("thread_id")
+        item = obj.get("item") or {}
+        if obj.get("type") == "item.completed" and item.get("type") == "agent_message":
+            reply = item.get("text") or reply
+    return thread_id, reply
+
+
+def run_codex_turn(root: Path, prompt: str, thread_id: str | None) -> tuple[str, str | None]:
+    cmd = [
+        "codex",
+        "exec",
+        "-C",
+        str(root),
+        "--skip-git-repo-check",
+        "-s",
+        "read-only",
+        "-m",
+        "gpt-5.4",
+        "--json",
+    ]
+    if thread_id:
+        cmd.extend(["resume", thread_id, prompt])
+    else:
+        cmd.append(prompt)
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=180)
+    next_thread_id, reply = parse_codex_jsonl(proc.stdout)
+    effective_thread_id = next_thread_id or thread_id
+    if not reply:
+        raise RuntimeError("codex produced no assistant reply")
+    return reply, effective_thread_id
+
+
+def run_codex_with_retry(root: Path, prompt: str, thread_id: str | None, attempts: int = 2) -> tuple[str, str | None]:
+    last_error: Exception | None = None
+    current_thread_id = thread_id
+    for attempt in range(1, attempts + 1):
+        try:
+            return run_codex_turn(root, prompt, current_thread_id)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, RuntimeError) as exc:
+            last_error = exc
+            if attempt == attempts:
+                break
+            time.sleep(float(attempt))
+    raise last_error if last_error else RuntimeError("unknown codex failure")
 
 
 def help_message() -> str:
@@ -254,6 +277,7 @@ def help_message() -> str:
             "- what is the strategy?",
             "- what should we do next?",
             "- how is the budget looking?",
+            "- reset session",
         ]
     )
 
@@ -277,6 +301,7 @@ def main() -> int:
     sent = state.get("sent", {})
     offset = state.get("offset")
     chats = state.get("chats", {})
+    threads = state.get("threads", {})
     initialized = bool(state)
 
     while True:
@@ -304,14 +329,21 @@ def main() -> int:
                 continue
 
             transcript = chats.get(chat_id, [])
+            thread_id = threads.get(chat_id)
             if user_text.lower() in {"/start", "/help", "help"}:
                 reply = help_message()
+            elif user_text.lower() in {"reset", "/reset", "new session", "reset session"}:
+                threads.pop(chat_id, None)
+                chats[chat_id] = []
+                reply = "Parameter Golf Bot\nSession reset. Ask naturally again."
             else:
                 transcript.append({"role": "user", "text": user_text, "timestamp": utc_now()})
                 prompt = build_prompt(root, live_root, transcript, user_text)
                 try:
-                    reply = run_codex_reply(root, prompt)
-                except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+                    reply, next_thread_id = run_codex_with_retry(root, prompt, thread_id)
+                    if next_thread_id:
+                        threads[chat_id] = next_thread_id
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired, RuntimeError) as exc:
                     reply = "\n".join(
                         [
                             "Parameter Golf Bot",
@@ -333,6 +365,7 @@ def main() -> int:
                 "offset": offset,
                 "sent": sent,
                 "chats": chats,
+                "threads": threads,
             },
         )
         time.sleep(args.poll_interval)
