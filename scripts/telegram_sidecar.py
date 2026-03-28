@@ -232,7 +232,11 @@ def classify_query(text: str) -> str:
     normalized = text.strip().lower()
     if normalized in {"/start", "/help", "help"}:
         return "help"
+    if normalized in {"hi", "hello", "hey", "yo", "sup"}:
+        return "greeting"
     if normalized in {"/status", "status"} or ("how" in normalized and "going" in normalized):
+        return "status"
+    if "how are" in normalized or "things good" in normalized or "good?" in normalized:
         return "status"
     if normalized in {"/strategy", "strategy", "plan"} or "strategy" in normalized:
         return "strategy"
@@ -326,6 +330,17 @@ def main() -> int:
             query = classify_query(text)
             if query == "help":
                 reply = help_message()
+            elif query == "greeting":
+                snapshot = active_snapshot(live_root)
+                reply = "\n".join(
+                    [
+                        "Parameter Golf Bot",
+                        "Current snapshot:",
+                        status_message(snapshot),
+                        "",
+                        "You can also ask: strategy, next, budget, help",
+                    ]
+                )
             elif query == "status":
                 reply = status_message(active_snapshot(live_root))
             elif query == "strategy":
@@ -335,10 +350,15 @@ def main() -> int:
             elif query == "budget":
                 reply = budget_message(root)
             else:
+                snapshot = active_snapshot(live_root)
                 reply = "\n".join(
                     [
                         "Parameter Golf Bot",
-                        "Use: status, strategy, next, budget, help",
+                        "I did not map that message exactly.",
+                        "",
+                        status_message(snapshot),
+                        "",
+                        "Try: status, strategy, next, budget, help",
                     ]
                 )
             send_telegram(args.bot_token, args.chat_id, reply)
