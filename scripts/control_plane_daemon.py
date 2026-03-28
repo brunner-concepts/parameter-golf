@@ -1138,6 +1138,12 @@ def executive_diagnosis(
             "The operator stopped because projected spend would exceed the current daily cap.",
             "Wait for the next budget window or raise the cap override if that is strategically justified.",
         )
+    if queue_state.get("blocked") and queue_state.get("blocked_reason") == "pr868_full_already_complete":
+        return (
+            "pr868_full_complete_review",
+            "PR #868 full repro is complete and the operator is intentionally paused for result review.",
+            "Write the structured result, compare it against the claimed PR score and legality posture, then decide whether to investigate the reproduction mismatch or pivot to #913/#933.",
+        )
     if queue_state.get("next_run_id"):
         return (
             "active_target_ready",
@@ -1446,6 +1452,85 @@ def recover_stale_launch_pods(
         )
 
 
+def reconcile_terminal_pods(
+    live_root: Path,
+    state_root: Path,
+    events_path: Path,
+    budget_state: dict[str, Any],
+) -> None:
+    if not live_root.exists():
+        return
+    active_pods = {
+        str(pod.get("id")): pod
+        for pod in budget_state.get("active_pods", [])
+        if pod.get("id") and pod.get("desiredStatus") == "RUNNING"
+    }
+
+    for run_dir in sorted(live_root.iterdir()):
+        if not run_dir.is_dir():
+            continue
+        launch = read_json_if_exists(run_dir / "launch.json")
+        pod_id = str(launch.get("pod_id") or "")
+
+        terminal_result = read_json_if_exists(run_dir / "terminal_result.json")
+        terminal_status = terminal_result.get("status")
+        if terminal_status not in TERMINAL_STATUSES:
+            continue
+
+        supervisor_state_path = run_dir / "supervisor_state.json"
+        supervisor_state = read_json_if_exists(supervisor_state_path)
+        outcome = {
+            "outcome": "success" if terminal_status in {"complete", "dry-run-complete"} else "failed",
+            "terminal_status": terminal_status,
+            "classification": "terminal_complete" if terminal_status in {"complete", "dry-run-complete"} else "terminal_failed",
+            "pod_id": pod_id,
+        }
+        recovered_state = dict(supervisor_state)
+        recovered_state.update(
+            {
+                "updated_at": utc_now(),
+                "status": "complete" if terminal_status in {"complete", "dry-run-complete"} else "failed",
+                "outcome": outcome,
+                "recovered_by": "control_plane_daemon",
+                "cleanup_reason": "terminal_pod_reconciled",
+            }
+        )
+        atomic_write_json(supervisor_state_path, recovered_state)
+        if pod_id and pod_id in active_pods:
+            stop_pod_quietly(pod_id)
+        append_jsonl(
+            run_dir / "supervisor_events.jsonl",
+            {
+                "event": "terminal_pod_reconciled",
+                "timestamp": utc_now(),
+                "run_id": run_dir.name,
+                "pod_id": pod_id,
+                "terminal_status": terminal_status,
+                "pod_cleanup_requested": bool(pod_id and pod_id in active_pods),
+            },
+        )
+        append_jsonl(
+            events_path,
+            {
+                "event": "terminal_pod_reconciled",
+                "timestamp": utc_now(),
+                "run_id": run_dir.name,
+                "pod_id": pod_id,
+                "terminal_status": terminal_status,
+            },
+        )
+        maybe_emit_notification(
+            "Parameter Golf terminal pod reconciled",
+            "\n".join(
+                [
+                    f"run={run_dir.name}",
+                    f"pod={pod_id}",
+                    f"terminal_status={terminal_status}",
+                ]
+            ),
+        )
+
+
 def recover_orphaned_supervisor_states(
     live_root: Path,
     state_root: Path,
@@ -1583,6 +1668,8 @@ def main() -> int:
             budget_state = refresh_budget(policy, state_root, events_path, overrides)
             budget_due = now + float(policy["poll_intervals_seconds"]["budget"])
         if now >= queue_due:
+            reconcile_terminal_pods(live_root, state_root, events_path, budget_state)
+            budget_state = refresh_budget(policy, state_root, events_path, overrides)
             recover_stale_launch_pods(
                 live_root,
                 state_root,

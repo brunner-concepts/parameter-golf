@@ -144,6 +144,23 @@ def notify_retry_event(local_dir: Path, attempt: int, classification: str, pod_i
     )
 
 
+def cleanup_pod_after_outcome(local_dir: Path, outcome: dict[str, Any], reason: str) -> None:
+    pod_id = outcome.get("pod_id")
+    if not pod_id:
+        return
+    launcher.stop_pod_quietly(str(pod_id))
+    append_jsonl(
+        local_dir / "supervisor_events.jsonl",
+        {
+            "event": "pod_cleanup_requested",
+            "timestamp": utc_now(),
+            "pod_id": pod_id,
+            "reason": reason,
+            "outcome": outcome,
+        },
+    )
+
+
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
@@ -246,6 +263,7 @@ def main() -> int:
         )
 
         if outcome["outcome"] == "success":
+            cleanup_pod_after_outcome(local_dir, outcome, "terminal_success")
             atomic_write_json(
                 supervisor_state_path,
                 {
@@ -259,9 +277,11 @@ def main() -> int:
             return 0
 
         if outcome["outcome"] == "infra_failure" and attempt <= args.max_infra_retries:
+            cleanup_pod_after_outcome(local_dir, outcome, "infra_failure_retry")
             notify_retry_event(local_dir, attempt, outcome["classification"], outcome.get("pod_id"))
             continue
 
+        cleanup_pod_after_outcome(local_dir, outcome, "terminal_or_nonretry_failure")
         atomic_write_json(
             supervisor_state_path,
             {

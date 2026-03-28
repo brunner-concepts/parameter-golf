@@ -244,3 +244,19 @@ Promote the operator from a guarded retry loop into an executive control plane w
 2. `budget_state.json` should be driven by real RunPod billing history plus reserve checks, not only by launch reservations.
 3. `executive_state.json`, `working_memory.md`, and `decisions.jsonl` become first-class memory artifacts for the autonomous operator.
 4. Telegram becomes a control room over the executive layer, with deterministic `pause`, `resume`, `budget`, `why`, `decision`, and `cap` commands in addition to conversational Codex turns.
+
+## 2026-03-28 — PR #868 full repro completed, but it is not yet an understood reproduction
+
+**Decision:**
+Treat the first full provider-staged `#868` run as a major operational success and a scientific review task, not as an auto-promote candidate.
+
+**Rationale:**
+- The run completed end-to-end on `8x H100 SXM` using the shared provider-side FlashAttention cache and produced a final exact n-gram score of `0.09749802`, artifact size `13,416,133` bytes, and n-gram eval time `495.326s`.
+- That is far stronger than the PR title claim of `0.11814796`, which means the run does **not** satisfy the project’s reproduction-within-tolerance rule. A result that is materially better than the claimed upstream score is still “not understood.”
+- The wallclock stop also logged `600.027s`, which is slightly above the nominal training budget and needs interpretation before any packaging decision.
+- Separately, the operator exposed a real teardown bug: the pod was still running after terminal completion because success did not trigger cleanup and the daemon had no reconciler for `terminal_result complete + pod still RUNNING`.
+
+**Consequences:**
+1. Patch the operator so successful terminal runs trigger pod teardown and stale terminal-complete pods are reconciled automatically.
+2. Write a structured result report for `repro_pr868_full` and update experiment memory immediately.
+3. Do **not** auto-promote to `#913` or `#933` yet. First explain why this run differs so far from the published `#868` claim, then decide whether the next action is config reconciliation, rerun, or target pivot.
