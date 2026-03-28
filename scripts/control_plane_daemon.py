@@ -441,6 +441,34 @@ def any_active_live_run(live_root: Path) -> list[dict[str, Any]]:
     return active_runs
 
 
+def active_supervisor_run(live_root: Path, timeout_s: int = 600) -> dict[str, Any] | None:
+    if not live_root.exists():
+        return None
+    now = datetime.now(timezone.utc)
+    freshest: tuple[datetime, dict[str, Any]] | None = None
+    for child in sorted(live_root.iterdir()):
+        if not child.is_dir():
+            continue
+        supervisor_state = read_json_if_exists(child / "supervisor_state.json")
+        status = supervisor_state.get("status")
+        if status not in {"launching", "watching"}:
+            continue
+        updated_at = parse_utc_timestamp(supervisor_state.get("updated_at"))
+        if updated_at is None:
+            continue
+        if (now - updated_at).total_seconds() > timeout_s:
+            continue
+        payload = {
+            "run_id": child.name,
+            "status": status,
+            "updated_at": supervisor_state.get("updated_at"),
+            "attempt": supervisor_state.get("attempt"),
+        }
+        if freshest is None or updated_at > freshest[0]:
+            freshest = (updated_at, payload)
+    return freshest[1] if freshest else None
+
+
 def common_spec_env() -> dict[str, str]:
     return {
         "REPO_URL": "https://github.com/brunner-concepts/parameter-golf.git",
@@ -724,12 +752,16 @@ def evaluate_queue(
         "blocked": False,
         "blocked_reason": "",
         "active_runs": any_active_live_run(live_root),
+        "active_supervisor": None,
         "candidates": frontier_snapshot.get("targets", []),
         "next_spec": None,
         "next_run_id": None,
         "next_target_pr": None,
     }
     if supervisor_proc is not None and supervisor_proc.poll() is None:
+        queue_state["active_supervisor"] = active_supervisor_run(live_root)
+        if queue_state["active_supervisor"]:
+            queue_state["next_run_id"] = queue_state["active_supervisor"]["run_id"]
         queue_state["blocked"] = True
         queue_state["blocked_reason"] = "supervisor_process_active"
         return queue_state
