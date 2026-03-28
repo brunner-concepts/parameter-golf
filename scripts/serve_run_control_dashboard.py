@@ -26,6 +26,20 @@ def read_text_if_exists(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
 
 
+def load_control_plane_payload(control_root: Path | None) -> dict[str, Any]:
+    if control_root is None:
+        return {}
+    state_root = control_root / "state"
+    return {
+        "control_root": str(control_root),
+        "operator_state": read_json_if_exists(state_root / "operator_state.json"),
+        "frontier_snapshot": read_json_if_exists(state_root / "frontier_snapshot.json"),
+        "budget_state": read_json_if_exists(state_root / "budget_state.json"),
+        "queue": read_json_if_exists(state_root / "queue.json"),
+        "events": read_text_if_exists(state_root / "events.jsonl"),
+    }
+
+
 def load_run_payload(run_dir: Path) -> dict[str, Any]:
     current = read_json_if_exists(run_dir / "current_state.json")
     heartbeat = read_json_if_exists(run_dir / "heartbeat.json")
@@ -68,8 +82,63 @@ def format_pre(text: str) -> str:
     return f"<pre>{html.escape(text.strip() or '(empty)')}</pre>"
 
 
-def render_index(live_root: Path) -> str:
+def render_control_plane(control: dict[str, Any]) -> str:
+    if not control:
+        return ""
+    operator = control.get("operator_state") or {}
+    budget = control.get("budget_state") or {}
+    queue = control.get("queue") or {}
+    frontier = control.get("frontier_snapshot") or {}
+    ranked = frontier.get("targets") or []
+    ranked_items = [
+        f"<li>PR #{html.escape(str(item.get('pr')))}: score={html.escape(str(item.get('ranking_score')))} "
+        f"(claimed_bpb={html.escape(str(item.get('claimed_bpb')))}, legality={html.escape(str(item.get('legality_risk')))}, auto_run={html.escape(str(item.get('auto_run')))}"  # noqa: E501
+        "</li>"
+        for item in ranked[:5]
+    ]
+    if not ranked_items:
+        ranked_items = ["<li>No ranked targets yet.</li>"]
+    return "\n".join(
+        [
+            "<section class='control-plane'>",
+            "<h2>Control Plane</h2>",
+            "<div class='grid'>",
+            "<article class='card'>",
+            "<h3>Budget</h3>",
+            f"<p><strong>balance</strong>: ${html.escape(str(budget.get('client_balance', 'unknown')))}</p>",
+            f"<p><strong>active_pods</strong>: {html.escape(str(budget.get('active_pod_count', 'unknown')))}</p>",
+            f"<p><strong>reserved_today</strong>: ${html.escape(str(budget.get('reserved_today_usd', 'unknown')))}</p>",
+            f"<p><strong>daily_cap</strong>: ${html.escape(str(budget.get('daily_cap_usd', 'unknown')))}</p>",
+            "</article>",
+            "<article class='card'>",
+            "<h3>Queue</h3>",
+            f"<p><strong>blocked</strong>: {html.escape(str(queue.get('blocked', 'unknown')))}</p>",
+            f"<p><strong>blocked_reason</strong>: {html.escape(str(queue.get('blocked_reason', '')))}</p>",
+            f"<p><strong>next_run_id</strong>: {html.escape(str(queue.get('next_run_id', '')))}</p>",
+            f"<p><strong>next_spec</strong>: {html.escape(str(queue.get('next_spec', '')))}</p>",
+            "</article>",
+            "<article class='card'>",
+            "<h3>Operator</h3>",
+            f"<p><strong>updated_at</strong>: {html.escape(str(operator.get('updated_at', 'unknown')))}</p>",
+            f"<p><strong>dashboard_pid</strong>: {html.escape(str(operator.get('dashboard_pid', '')))}</p>",
+            f"<p><strong>supervisor_pid</strong>: {html.escape(str(operator.get('supervisor_pid', '')))}</p>",
+            f"<p><strong>top_ranked_target</strong>: {html.escape(str(operator.get('top_ranked_target', '')))}</p>",
+            "</article>",
+            "<article class='card'>",
+            "<h3>Frontier Ranking</h3>",
+            "<ol>",
+            *ranked_items,
+            "</ol>",
+            "</article>",
+            "</div>",
+            "</section>",
+        ]
+    )
+
+
+def render_index(live_root: Path, control_root: Path | None) -> str:
     runs = list_runs(live_root)
+    control_payload = load_control_plane_payload(control_root)
     cards = []
     for run in runs:
         current = run["current_state"]
@@ -105,6 +174,7 @@ def render_index(live_root: Path) -> str:
         "</style></head><body>"
         "<h1>Run Control Dashboard</h1>"
         f"<p>Live root: <code>{html.escape(str(live_root))}</code></p>"
+        f"{render_control_plane(control_payload)}"
         f"<section class='grid'>{cards_html}</section>"
         "</body></html>"
     )
@@ -158,11 +228,14 @@ def render_run_detail(live_root: Path, run_id: str) -> str:
 
 class DashboardHandler(BaseHTTPRequestHandler):
     live_root: Path
+    control_root: Path | None
 
     def do_GET(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == "/":
-            return self.respond_html(render_index(self.live_root))
+            return self.respond_html(render_index(self.live_root, self.control_root))
+        if parsed.path == "/api/control-plane":
+            return self.respond_json(load_control_plane_payload(self.control_root))
         if parsed.path == "/api/runs":
             runs = list_runs(self.live_root)
             return self.respond_json(runs)
@@ -199,6 +272,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8787)
     parser.add_argument("--live-root", default="11_RUN_CONTROL/live")
+    parser.add_argument("--control-plane-root", default="")
     return parser
 
 
@@ -206,7 +280,12 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
     live_root = Path(args.live_root).resolve()
-    handler_cls = type("RunControlDashboardHandler", (DashboardHandler,), {"live_root": live_root})
+    control_root = Path(args.control_plane_root).resolve() if args.control_plane_root else None
+    handler_cls = type(
+        "RunControlDashboardHandler",
+        (DashboardHandler,),
+        {"live_root": live_root, "control_root": control_root},
+    )
     server = ThreadingHTTPServer((args.host, args.port), handler_cls)
     print(f"Run Control Dashboard serving {live_root} on http://{args.host}:{args.port}", flush=True)
     server.serve_forever()

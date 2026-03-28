@@ -95,11 +95,19 @@ Useful routes:
 - `/runs/<run_id>` — one run detail page
 - `/api/runs` — JSON for automation
 
-## Nissanbox mode
+## Local operator mode
 
-The recommended always-on setup is the Nissanbox container scaffold in:
+The preferred sandboxed local operator now runs through:
 
-- `docker-compose.nissanbox.yml`
-- `ops/nissanbox/README.md`
+- `docker-compose.local-operator.yml`
+- `ops/local-operator/README.md`
+- `scripts/control_plane_daemon.py`
 
-That mode keeps RunPod control, notifications, and the dashboard alive without depending on this Mac.
+This adds:
+
+- budget-aware frontier polling
+- guarded auto-generation of the current cache-route repro specs
+- queue state under `11_RUN_CONTROL/control_plane/state/`
+- a single localhost-only dashboard that shows both control-plane state and live run mirrors
+
+The older Nissanbox scaffold still exists, but it is no longer the primary recommendation.

@@ -1,7 +1,11 @@
 FROM python:3.12-slim
 
+ARG RUNPODCTL_VERSION=1.14.3
+
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates git openssh-client tmux \
+    && apt-get install -y --no-install-recommends ca-certificates git openssh-client tmux wget \
+    && wget --quiet --show-progress https://github.com/Run-Pod/runpodctl/releases/download/v${RUNPODCTL_VERSION}/runpodctl-linux-amd64 -O /usr/local/bin/runpodctl \
+    && chmod +x /usr/local/bin/runpodctl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace/parameter-golf

@@ -42,7 +42,7 @@ Owns: record eligibility checklist, concise PR description, logs/artifacts/plots
 Owns: pod-local phase execution, heartbeats, durable run state, failure capture, and next-command suggestions.
 Never auto-promotes to a more expensive compute tier. Never overrides the promotion gates.
 Pairs with a local mirror/notifier layer that copies run state off-pod so expensive runs remain observable even if the provider exits the machine.
-Recommended deployment target is an always-on Nissanbox container that owns RunPod launch, Telegram notifications, and the private dashboard.
+Recommended deployment target is the local guardrailed operator container (`docker-compose.local-operator.yml`) that owns RunPod launch, control-plane state, and the private dashboard. A remote always-on host remains optional, not required.
 
 ## Execution phases
 
@@ -108,3 +108,7 @@ The Nissanbox operator additionally owns:
 - `scripts/operator_supervisor.py` for same-spec infra retries
 - `scripts/serve_run_control_dashboard.py` for private status visualization
 - Telegram/webhook notifications for meaningful run transitions
+
+The local operator additionally owns:
+- `scripts/control_plane_daemon.py` for frontier polling, budget governance, target ranking, and guarded auto-launch of approved specs only
+- `11_RUN_CONTROL/control_plane/` for policy, generated specs, advisory memos, and runtime snapshots

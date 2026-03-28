@@ -11,3 +11,7 @@ data/docs_selected.jsonl
 logs/
 11_RUN_CONTROL/live/
 11_RUN_CONTROL/cache/
+11_RUN_CONTROL/control_plane/state/
+11_RUN_CONTROL/control_plane/generated_specs/
+11_RUN_CONTROL/control_plane/advisory/
+11_RUN_CONTROL/control_plane/upstream_prs/

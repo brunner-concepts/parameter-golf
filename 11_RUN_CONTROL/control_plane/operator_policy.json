@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "daily_caps": {
+    "runpod_usd": 45.0,
+    "openai_usd": 4.0,
+    "minimum_runpod_balance_reserve_usd": 25.0
+  },
+  "concurrency": {
+    "max_concurrent_expensive_runs": 1,
+    "max_concurrent_smoke_runs": 1
+  },
+  "governance": {
+    "allow_auto_push": false,
+    "allow_auto_pr_open": false,
+    "allow_subagent_spend": false,
+    "autonomy_scope": "approved_specs_only"
+  },
+  "ranking_weights": {
+    "acceptance_safety": 0.4,
+    "reproducibility": 0.25,
+    "score_margin": 0.2,
+    "cost_inverse": 0.15
+  },
+  "frontier": {
+    "official_sota_bpb": 1.1194,
+    "issue_number": 140,
+    "tracked_prs": [
+      549,
+      868,
+      913,
+      933
+    ]
+  },
+  "targets": {
+    "868": {
+      "label": "budgeted_twopass_ngram",
+      "priority": 1,
+      "acceptance_safety": 0.95,
+      "reproducibility": 0.95,
+      "cost_inverse": 0.62,
+      "legality_risk": "low",
+      "auto_run": true,
+      "notes": "Conservative stepping-stone cache path with explicit legal score-first framing."
+    },
+    "933": {
+      "label": "cachemoney",
+      "priority": 2,
+      "acceptance_safety": 0.45,
+      "reproducibility": 0.9,
+      "cost_inverse": 0.85,
+      "legality_risk": "high",
+      "auto_run": false,
+      "notes": "Strongest live cache route, but two-pass legality is explicitly under active discussion."
+    },
+    "913": {
+      "label": "cache_is_all_you_need",
+      "priority": 3,
+      "acceptance_safety": 0.6,
+      "reproducibility": 0.88,
+      "cost_inverse": 0.93,
+      "legality_risk": "medium",
+      "auto_run": false,
+      "notes": "Important lineage target and cleaner code surface for phrase-cache blending."
+    }
+  },
+  "smoke_gpu_id": "NVIDIA H100 PCIe",
+  "reserve_hours_by_tier": {
+    "1xH100-smoke": 1.0,
+    "8xH100-SXM": 1.0
+  },
+  "poll_intervals_seconds": {
+    "frontier": 600,
+    "budget": 300,
+    "queue": 60
+  }
+}

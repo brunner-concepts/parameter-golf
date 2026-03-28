@@ -19,7 +19,7 @@ COMPUTE_DEFAULTS = {
         "min_balance": 25.0,
     },
     "1xH100-smoke": {
-        "gpu_id": "NVIDIA H100 80GB HBM3",
+        "gpu_id": "NVIDIA H100 PCIe",
         "gpu_count": 1,
         "min_balance": 5.0,
     },
@@ -297,12 +297,43 @@ def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
             }
         )
         write_launch_summary(local_dir, launch_summary)
-        try:
-            spec_rel = spec_path.relative_to(root)
-        except ValueError as exc:
+        remote_spec_dir = Path(args.remote_state_dir) / "specs"
+        remote_spec_path = remote_spec_dir / spec_path.name
+        mkdir_proc = subprocess.run(
+            ssh_cmd + [f"mkdir -p {shlex_quote(str(remote_spec_dir))}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if mkdir_proc.returncode != 0:
             stop_pod_quietly(pod_id)
-            raise LaunchError(f"Spec path {spec_path} must live under repo root {root}.", launch_summary) from exc
-        remote_spec_path = Path("/workspace/parameter-golf") / spec_rel
+            details = mkdir_proc.stderr.strip() or mkdir_proc.stdout.strip() or f"ssh exited {mkdir_proc.returncode}"
+            raise LaunchError(
+                f"Failed to create remote spec directory on pod {pod_id}: {details}",
+                launch_summary,
+            )
+        launch_summary.update(
+            {
+                "launch_phase": "copying_spec",
+                "remote_spec_path": str(remote_spec_path),
+            }
+        )
+        write_launch_summary(local_dir, launch_summary)
+        spec_copy = subprocess.run(
+            scp_cmd + [str(spec_path), f"root@{pod['ssh']['ip']}:{remote_spec_path}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if spec_copy.returncode != 0:
+            stop_pod_quietly(pod_id)
+            details = spec_copy.stderr.strip() or spec_copy.stdout.strip() or f"scp exited {spec_copy.returncode}"
+            raise LaunchError(
+                f"Failed to copy run spec to pod {pod_id}: {details}",
+                launch_summary,
+            )
+        launch_summary["launch_phase"] = "spec_copied"
+        write_launch_summary(local_dir, launch_summary)
         extra_env: dict[str, str] = {}
         cache_path = resolve_flash_attn_cache(root, args)
         if cache_path is not None:
