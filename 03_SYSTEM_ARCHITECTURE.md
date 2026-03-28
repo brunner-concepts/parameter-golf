@@ -117,10 +117,12 @@ The Nissanbox operator additionally owns:
 
 The local operator additionally owns:
 - `scripts/control_plane_daemon.py` for frontier polling, budget governance, target ranking, and guarded auto-launch of approved specs only
+- `scripts/repair_controller.py` for host-side deterministic self-repair, automatic parity reviews, and bounded patch/validate/audit/relaunch loops
 - `scripts/provider_storage_manager.py` for provider-side staging on RunPod network volumes
 - `11_RUN_CONTROL/control_plane/state/executive_state.json` for the current diagnosis, next autonomous action, and provider-storage readiness
 - `11_RUN_CONTROL/control_plane/state/working_memory.md` for a human-readable executive summary
 - `11_RUN_CONTROL/control_plane/state/decisions.jsonl` for durable executive decisions and topology pivots
+- `11_RUN_CONTROL/control_plane/state/repair_queue.json` and `repair_journal.jsonl` for the current repair lane and its audit trail
 - `11_RUN_CONTROL/control_plane/` for policy, generated specs, advisory memos, and runtime snapshots
 
 ## Control hierarchy
@@ -129,9 +131,10 @@ The runtime org chart is now:
 
 1. `User / board` — capital allocator and final authority
 2. `Executive operator` — strategy, diagnosis, topology pivots, budget-aware autonomy
-3. `Control plane daemon` — queue evaluation, spend checks, launch orchestration
-4. `Operator supervisor` — same-spec infra retries and launch ownership
-5. `Run watchdog` — pod-local phase execution and terminal evidence
-6. `Mirror / Telegram / dashboard` — visibility and external reporting only
+3. `Repair controller` — deterministic self-repair, parity review, guarded auto-push, and relaunch ownership
+4. `Control plane daemon` — queue evaluation, spend checks, launch orchestration
+5. `Operator supervisor` — same-spec infra retries and launch ownership
+6. `Run watchdog` — pod-local phase execution and terminal evidence
+7. `Mirror / Telegram / dashboard` — visibility and external reporting only
 
 This keeps the actual execution loop autonomous while making every state transition auditable from files on disk.

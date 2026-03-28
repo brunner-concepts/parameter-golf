@@ -107,9 +107,11 @@ This adds:
 
 - budget-aware frontier polling
 - guarded auto-generation of the current cache-route repro specs
+- a host-side repair controller that turns deterministic target-family failures and completed parity reviews into autonomous repair/review items instead of manual dead-ends
 - executive state under `11_RUN_CONTROL/control_plane/state/executive_state.json`
 - durable executive memory in `11_RUN_CONTROL/control_plane/state/working_memory.md`
 - decision history in `11_RUN_CONTROL/control_plane/state/decisions.jsonl`
+- repair state under `11_RUN_CONTROL/control_plane/state/repair_queue.json`, `repair_policy.json`, and `repair_journal.jsonl`
 - actual billed-spend accounting instead of naive launch reservations
 - provider-side staging via RunPod network volumes for reusable FlashAttention assets
 - queue state under `11_RUN_CONTROL/control_plane/state/`
@@ -132,8 +134,10 @@ It may not:
 
 - invent a new research lane outside the approved target family
 - widen legality risk automatically
-- auto-push or auto-open PRs
+- auto-open PRs
 - ignore the artifact/runtime/legality gates
+
+The repair controller may auto-push only validated, audited repair commits inside the approved target-family and operator scope.
 
 ## Telegram control room
 
@@ -149,9 +153,14 @@ Useful commands:
 - `why`
 - `decision`
 - `budget`
+- `repair`
+- `last fix`
+- `why blocked`
 - `pause`
 - `resume`
 - `cap <usd>`
+- `pause repairs`
+- `resume repairs`
 
 Freeform chat still routes through Codex, but these commands mutate or report real local operator state directly.
 
@@ -193,3 +202,17 @@ Those files define:
 - the exact pinned challenge manifest and Hugging Face revision for the rerun
 
 This is the control plane’s answer to the unresolved `#868` mismatch: no more blind reruns against a moving evaluation surface.
+
+## Autonomous repair lane
+
+The operator no longer treats `*_failed_manual_review` or `*_complete_review` as permanent dead ends inside the approved cache family.
+
+Instead, the host-side repair controller:
+
+- enqueues deterministic repair/review items in `repair_queue.json`
+- writes durable session records under `repair_sessions/`
+- records every repair transition in `repair_journal.jsonl`
+- may run a bounded `patch -> validate -> audit -> push -> relaunch` loop for deterministic target-family failures
+- automatically resolves completed parity runs into a decision artifact so the queue does not wait on chat
+
+This is the mechanism that keeps the loop moving even when a deterministic failure or completed review would previously have required you to intervene.

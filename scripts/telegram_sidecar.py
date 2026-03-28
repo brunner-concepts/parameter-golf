@@ -186,9 +186,15 @@ def build_live_context(root: Path, live_root: Path) -> str:
     funding_ledger = read_json(root / "11_RUN_CONTROL/funding_ledger.json")
     queue_state = read_json(root / "11_RUN_CONTROL/control_plane/state/queue.json")
     provider_storage_state = read_json(root / "11_RUN_CONTROL/control_plane/state/provider_storage_state.json")
+    repair_queue = read_json(root / "11_RUN_CONTROL/control_plane/state/repair_queue.json")
+    repair_policy = read_json(root / "11_RUN_CONTROL/control_plane/state/repair_policy.json")
+    repair_journal_lines = read_text(root / "11_RUN_CONTROL/control_plane/state/repair_journal.jsonl").splitlines()[-5:]
     decisions_path = root / "11_RUN_CONTROL/control_plane/state/decisions.jsonl"
     decision_lines = read_text(decisions_path).splitlines()[-5:]
     snapshot = active_snapshot(live_root)
+    repair_items = repair_queue.get("items") or []
+    repair_active = next((item for item in repair_items if item.get("status") in {"queued", "in_progress", "awaiting_validation", "awaiting_audit", "awaiting_push", "relaunching"}), None)
+    repair_latest = sorted(repair_items, key=lambda item: item.get("updated_at") or "", reverse=True)[:1]
 
     context = {
         "executive_state": executive_state,
@@ -218,6 +224,17 @@ def build_live_context(root: Path, live_root: Path) -> str:
             "next_target_pr": queue_state.get("next_target_pr"),
             "candidates": (queue_state.get("candidates") or [])[:3],
             "updated_at": queue_state.get("updated_at"),
+        },
+        "repair_state": {
+            "paused": repair_policy.get("paused", False),
+            "active_count": sum(
+                1
+                for item in repair_items
+                if item.get("status") in {"queued", "in_progress", "awaiting_validation", "awaiting_audit", "awaiting_push", "relaunching"}
+            ),
+            "active": repair_active,
+            "latest": repair_latest[0] if repair_latest else None,
+            "journal_tail": repair_journal_lines,
         },
         "recent_decisions_jsonl_tail": decision_lines,
         "active_or_latest_run": {
@@ -363,6 +380,10 @@ def help_message() -> str:
             "- quiet",
             "- loud",
             "- why",
+            "- repair",
+            "- last fix",
+            "- pause repairs",
+            "- resume repairs",
             "- decision",
             "- reset session",
         ]
@@ -371,6 +392,10 @@ def help_message() -> str:
 
 def overrides_path(root: Path) -> Path:
     return root / "11_RUN_CONTROL/control_plane/state/operator_overrides.json"
+
+
+def repair_policy_path(root: Path) -> Path:
+    return root / "11_RUN_CONTROL/control_plane/state/repair_policy.json"
 
 
 def write_overrides(path: Path, payload: dict[str, Any]) -> None:
@@ -429,10 +454,22 @@ def deterministic_reply(root: Path, live_root: Path, user_text: str) -> str | No
     budget_state = read_json(root / "11_RUN_CONTROL/control_plane/state/budget_state.json")
     status_snapshot = read_json(root / "11_RUN_CONTROL/control_plane/state/status_snapshot.json")
     funding_ledger = read_json(root / "11_RUN_CONTROL/funding_ledger.json")
+    repair_queue = read_json(root / "11_RUN_CONTROL/control_plane/state/repair_queue.json")
+    repair_policy = read_json(repair_policy_path(root))
     campaign = status_snapshot.get("campaign", {})
     snapshot = active_snapshot(live_root) or {}
     override_path = overrides_path(root)
     overrides = read_overrides(override_path)
+    repair_items = repair_queue.get("items") or []
+    active_repair = next(
+        (
+            item
+            for item in repair_items
+            if item.get("status") in {"queued", "in_progress", "awaiting_validation", "awaiting_audit", "awaiting_push", "relaunching"}
+        ),
+        None,
+    )
+    latest_repair = sorted(repair_items, key=lambda item: item.get("updated_at") or "", reverse=True)[:1]
 
     if text in {"pause", "/pause"}:
         overrides["paused"] = True
@@ -453,6 +490,14 @@ def deterministic_reply(root: Path, live_root: Path, user_text: str) -> str | No
         overrides["updated_at"] = utc_now()
         write_overrides(override_path, overrides)
         return f"Daily RunPod cap set to ${cap_value:.2f}. The control plane will use that on the next budget refresh."
+    if text in {"pause repairs", "/pause-repairs"}:
+        payload = {"paused": True, "updated_at": utc_now()}
+        atomic_write_json(repair_policy_path(root), payload)
+        return "Repairs paused. The operator can still observe and report, but it will not auto-process new repair items until repairs are resumed."
+    if text in {"resume repairs", "/resume-repairs"}:
+        payload = {"paused": False, "updated_at": utc_now()}
+        atomic_write_json(repair_policy_path(root), payload)
+        return "Repairs resumed. The host-side repair controller can process queued repair items again."
     if text in {"budget", "/budget"}:
         lines = [
             "Parameter Golf Budget",
@@ -497,6 +542,69 @@ def deterministic_reply(root: Path, live_root: Path, user_text: str) -> str | No
                 "",
                 "Recent decisions:",
                 recent_decision_text(root),
+            ]
+        )
+    if text in {"repair", "/repair"}:
+        if active_repair:
+            result = active_repair.get("result") or {}
+            return "\n".join(
+                [
+                    "Parameter Golf Repair",
+                    f"id={active_repair.get('id')}",
+                    f"kind={active_repair.get('kind')}",
+                    f"run={active_repair.get('run_id')}",
+                    f"status={active_repair.get('status')}",
+                    f"paused={bool(repair_policy.get('paused', False))}",
+                    result.get("summary") or result.get("reason") or active_repair.get("summary") or "",
+                ]
+            )
+        if latest_repair:
+            item = latest_repair[0]
+            result = item.get("result") or {}
+            return "\n".join(
+                [
+                    "Parameter Golf Repair",
+                    "No active repair is running.",
+                    f"last_id={item.get('id')}",
+                    f"last_status={item.get('status')}",
+                    f"last_kind={item.get('kind')}",
+                    result.get("summary") or result.get("reason") or item.get("summary") or "",
+                ]
+            )
+        return "No repair items are recorded yet."
+    if text in {"last fix", "/last-fix"}:
+        if not latest_repair:
+            return "No completed repair or review item is recorded yet."
+        item = latest_repair[0]
+        result = item.get("result") or {}
+        lines = [
+            "Parameter Golf Last Fix",
+            f"id={item.get('id')}",
+            f"kind={item.get('kind')}",
+            f"status={item.get('status')}",
+            f"updated_at={item.get('updated_at')}",
+        ]
+        if result.get("decision_key"):
+            lines.append(f"decision={result.get('decision_key')}")
+        if result.get("summary"):
+            lines.extend(["", result.get("summary")])
+        elif result.get("reason"):
+            lines.extend(["", str(result.get("reason"))])
+        return "\n".join(lines)
+    if text in {"why blocked", "/why-blocked"}:
+        blocked_reason = (status_snapshot.get("current_focus") or {}).get("queue_blocked_reason") or executive_state.get("queue_blocked_reason")
+        next_action = (
+            status_snapshot.get("diagnosis", {}).get("next_autonomous_action")
+            or executive_state.get("next_autonomous_action")
+            or "No next action recorded yet."
+        )
+        return "\n".join(
+            [
+                "Parameter Golf Queue",
+                f"blocked_reason={blocked_reason}",
+                "",
+                "Next action:",
+                next_action,
             ]
         )
     if text in {"next", "/next"}:

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import provider_storage_manager
+import repair_controller
 
 
 API_ROOT = "https://api.github.com/repos/openai/parameter-golf"
@@ -1282,6 +1283,7 @@ def executive_diagnosis(
     queue_state: dict[str, Any],
     provider_storage_state: dict[str, Any],
     overrides: dict[str, Any],
+    repair_summary: dict[str, Any],
 ) -> tuple[str, str, str]:
     top_target = frontier_snapshot.get("targets", [{}])[0]
     active_target_pr = queue_state.get("next_target_pr") or top_target.get("pr")
@@ -1291,6 +1293,21 @@ def executive_diagnosis(
             "paused_by_override",
             "Operator is paused by explicit override. No new compute will launch until resumed.",
             "Wait for a resume command, then continue on the top-ranked approved target.",
+        )
+    active_repair = (repair_summary or {}).get("active") or {}
+    if queue_state.get("blocked") and queue_state.get("blocked_reason") == "repair_in_progress":
+        repair_kind = active_repair.get("kind") or "repair"
+        repair_run = active_repair.get("run_id") or queue_state.get("next_run_id")
+        if repair_kind == "parity_review_pr868":
+            return (
+                "repair_in_progress",
+                "The operator is automatically resolving the completed PR #868 parity rerun into a final decision instead of waiting on manual review.",
+                f"Finish the parity review for {repair_run}, write the decision artifacts, and update the grant/PR readiness state automatically.",
+            )
+        return (
+            "repair_in_progress",
+            "The operator is actively running a bounded self-repair loop for a deterministic target-family failure.",
+            f"Complete the repair for {repair_run}, validate it, audit it, and relaunch the same approved spec automatically.",
         )
     if provider_storage_state.get("status") == "seeding":
         remote_path = (provider_storage_state.get("seeded_flash_attn") or {}).get("remote_path") or provider_storage_state.get("flash_attn_remote_path")
@@ -1343,6 +1360,18 @@ def executive_diagnosis(
             "The pinned-manifest PR #868 rerun is complete and ready for a final parity decision.",
             "Compare chunk counts, tuned chunks, runtime, and exact BPB against upstream, then decide whether #868 is understood enough for promotion or still blocked.",
         )
+    if queue_state.get("blocked") and queue_state.get("blocked_reason") == "pr868_parity_divergence_resolved":
+        return (
+            "pr868_parity_divergence_resolved",
+            "The pinned-manifest PR #868 rerun automatically resolved to persistent divergence after the frozen replay.",
+            "Stop new #868 replay spend, preserve the evidence, and submit the development-grant request with the stronger frozen-surface narrative.",
+        )
+    if queue_state.get("blocked") and queue_state.get("blocked_reason") == "pr868_parity_understood":
+        return (
+            "pr868_understood_reproduction",
+            "The pinned-manifest PR #868 rerun automatically resolved as an understood reproduction.",
+            "Do not open a pure reproduction PR yet; decide whether to package a conservative derivative or pivot the proven operator stack to the next cache lineage target.",
+        )
     if queue_state.get("next_run_id"):
         return (
             "active_target_ready",
@@ -1365,6 +1394,7 @@ def build_executive_state(
     provider_storage_state: dict[str, Any],
     overrides: dict[str, Any],
     spend_campaign: dict[str, Any],
+    repair_summary: dict[str, Any],
 ) -> dict[str, Any]:
     diagnosis_key, diagnosis, next_action = executive_diagnosis(
         frontier_snapshot,
@@ -1372,6 +1402,7 @@ def build_executive_state(
         queue_state,
         provider_storage_state,
         overrides,
+        repair_summary,
     )
     return {
         "updated_at": utc_now(),
@@ -1406,6 +1437,7 @@ def build_executive_state(
             or provider_storage_state.get("flash_attn_remote_path"),
             "seed_failures": provider_storage_state.get("seed_failures", 0),
         },
+        "repair": repair_summary,
         "overrides": overrides,
         "autonomy_scope": (policy.get("governance") or {}).get("autonomy_scope"),
         "recent_decisions": tail_jsonl(state_root / "decisions.jsonl", 5),
@@ -1427,6 +1459,8 @@ def write_working_memory(state_root: Path, executive_state: dict[str, Any]) -> N
         f"- campaign_additional_spend_used_usd: `{executive_state.get('campaign', {}).get('additional_spend_used_usd')}`",
         f"- campaign_max_additional_spend_usd: `{executive_state.get('campaign', {}).get('max_additional_spend_usd')}`",
         f"- provider_storage_status: `{executive_state.get('provider_storage', {}).get('status')}`",
+        f"- repair_active_count: `{executive_state.get('repair', {}).get('active_count')}`",
+        f"- repair_paused: `{executive_state.get('repair', {}).get('paused')}`",
         "",
         "## Diagnosis",
         "",
@@ -1450,6 +1484,7 @@ def maybe_record_executive_change(
         "active_run_id": executive_state.get("active_run_id"),
         "queue_blocked_reason": executive_state.get("queue_blocked_reason"),
         "provider_storage_status": executive_state.get("provider_storage", {}).get("status"),
+        "repair_active_id": (executive_state.get("repair", {}).get("active") or {}).get("id"),
         "next_autonomous_action": executive_state.get("next_autonomous_action"),
     }
     previous = read_json_if_exists(marker_path)
@@ -1482,6 +1517,7 @@ def build_operator_state(
     frontier_snapshot: dict[str, Any],
     queue_state: dict[str, Any],
     provider_storage_state: dict[str, Any],
+    repair_summary: dict[str, Any],
     dashboard_proc: subprocess.Popen[str] | None,
     supervisor_proc: subprocess.Popen[str] | None,
 ) -> dict[str, Any]:
@@ -1504,6 +1540,8 @@ def build_operator_state(
         "top_ranked_target": frontier_snapshot.get("targets", [{}])[0].get("pr") if frontier_snapshot.get("targets") else None,
         "queue_blocked": queue_state.get("blocked"),
         "queue_blocked_reason": queue_state.get("blocked_reason"),
+        "repair_active_id": (repair_summary.get("active") or {}).get("id"),
+        "repair_active_kind": (repair_summary.get("active") or {}).get("kind"),
         "provider_storage_status": provider_storage_state.get("status"),
         "provider_storage_volume_id": provider_storage_state.get("volume_id"),
     }
@@ -1517,6 +1555,7 @@ def build_status_snapshot(
     budget_state: dict[str, Any],
     queue_state: dict[str, Any],
     frontier_snapshot: dict[str, Any],
+    repair_summary: dict[str, Any],
 ) -> dict[str, Any]:
     root = repo_root()
     control_root = root / "11_RUN_CONTROL/control_plane"
@@ -1544,20 +1583,33 @@ def build_status_snapshot(
         ),
         "completion_gate": "Capture exact challenge manifest and shard inventory, then prepare a pinned-manifest #868 rerun path.",
     }
+    if diagnosis_key in {"pr868_parity_divergence_resolved", "pr868_understood_reproduction"}:
+        next_milestone["status"] = "complete"
+        next_milestone["blocking_reason"] = "The pinned-manifest PR #868 parity milestone is resolved and no longer needs manual review."
     grant_status = {
         "recommended_tier": "development_grant",
-        "recommended_timing": "after_next_milestone",
-        "ready_to_submit_now": False,
-        "blocking_reason": next_milestone["blocking_reason"],
+        "recommended_timing": (
+            "now" if diagnosis_key in {"pr868_parity_divergence_resolved", "pr868_understood_reproduction"} else "after_next_milestone"
+        ),
+        "ready_to_submit_now": diagnosis_key in {"pr868_parity_divergence_resolved", "pr868_understood_reproduction"},
+        "blocking_reason": (
+            ""
+            if diagnosis_key in {"pr868_parity_divergence_resolved", "pr868_understood_reproduction"}
+            else next_milestone["blocking_reason"]
+        ),
         "narrative_position": (
-            "Strong operational progress and a full 8x repro exist, but the #868 result is still under audit and should be presented as unresolved."
+            "The operator completed the frozen-surface #868 parity rerun and resolved the final self-funded milestone; the result remains unresolved for PR purposes but is now strong grant evidence."
+            if diagnosis_key == "pr868_parity_divergence_resolved"
+            else "Strong operational progress and a full 8x repro exist, but the #868 result is still under audit and should be presented as unresolved."
         ),
     }
     competition_pr_status = {
         "ready": False,
         "blocking_reason": (
             "PR #868 still has an unresolved eval-surface mismatch and should not be packaged as a competition PR yet."
-            if diagnosis_key != "pr868_parity_rerun_review"
+            if diagnosis_key in {"pr868_parity_divergence_resolved", "pr868_parity_rerun_review"}
+            else "A pure reproduction is not yet enough; the next move still needs either an understood conservative derivative or a justified frontier pivot."
+            if diagnosis_key == "pr868_understood_reproduction"
             else "The pinned-manifest rerun is complete, but it still needs an explicit parity decision before any PR packaging."
         ),
     }
@@ -1567,6 +1619,10 @@ def build_status_snapshot(
         lead = "PR #868 full repro completed, the eval surface is now pinned, and the next bounded parity rerun is waiting for the post-cap activation window."
     elif diagnosis_key == "pr868_parity_rerun_review":
         lead = "The pinned-manifest PR #868 parity rerun is complete and ready for a final reproduction decision."
+    elif diagnosis_key == "pr868_parity_divergence_resolved":
+        lead = "The pinned-manifest PR #868 parity rerun completed and the operator resolved it as persistent divergence after the frozen replay."
+    elif diagnosis_key == "pr868_understood_reproduction":
+        lead = "The pinned-manifest PR #868 parity rerun completed and the operator resolved it as an understood reproduction."
     else:
         lead = "PR #868 full repro completed on 8x H100 SXM and the leading diagnosis is eval-surface drift, not base-model mismatch."
     summary_lines = [
@@ -1584,7 +1640,10 @@ def build_status_snapshot(
         summary_lines.append(
             "A final self-funded PR #868 parity campaign is configured with a $100 envelope and a stop-after-milestone rule."
         )
-    summary_lines.append("Next milestone is a pinned-manifest #868 rerun path; competition PR submission remains blocked until that parity issue is resolved.")
+    if diagnosis_key in {"pr868_parity_divergence_resolved", "pr868_understood_reproduction"}:
+        summary_lines.append("The pinned-manifest parity milestone is resolved; competition PR submission remains blocked until the next strategic decision is packaged cleanly.")
+    else:
+        summary_lines.append("Next milestone is a pinned-manifest #868 rerun path; competition PR submission remains blocked until that parity issue is resolved.")
     return {
         "updated_at": utc_now(),
         "source_of_truth": {
@@ -1596,6 +1655,8 @@ def build_status_snapshot(
             "funding_ledger_path": "11_RUN_CONTROL/funding_ledger.json",
             "spend_campaign_path": "11_RUN_CONTROL/control_plane/spend_campaign.json",
             "surface_snapshot_path": "11_RUN_CONTROL/control_plane/data_surfaces/pr868_surface_snapshot.json",
+            "repair_queue_path": "11_RUN_CONTROL/control_plane/state/repair_queue.json",
+            "repair_journal_path": "11_RUN_CONTROL/control_plane/state/repair_journal.jsonl",
         },
         "summary": " ".join(summary_lines),
         "diagnosis": {
@@ -1631,6 +1692,7 @@ def build_status_snapshot(
             "allowed_run_ids": spend_campaign.get("allowed_run_ids", []),
         },
         "funding": funding_ledger,
+        "repair": repair_summary,
         "latest_results": {
             "full_repro": full_report,
             "mismatch_audit": mismatch_audit,
@@ -2017,6 +2079,7 @@ def main() -> int:
     while True:
         overrides = load_overrides(state_root)
         spend_campaign = load_spend_campaign(control_root)
+        repair_policy = repair_controller.load_repair_policy(state_root)
         now = time.monotonic()
         if now >= frontier_due or not frontier_snapshot:
             frontier_snapshot = sync_frontier(policy, control_root, state_root, events_path, frontier_snapshot)
@@ -2048,6 +2111,9 @@ def main() -> int:
                 overrides,
                 spend_campaign,
             )
+            repair_queue = repair_controller.load_repair_queue(state_root)
+            queue_state = repair_controller.apply_repair_queue_override(queue_state, repair_queue)
+            repair_summary = repair_controller.build_repair_summary(repair_queue, repair_policy)
             if args.no_launch:
                 provider_storage_state = read_json_if_exists(state_root / "provider_storage_state.json")
             else:
@@ -2076,6 +2142,9 @@ def main() -> int:
                     overrides,
                     spend_campaign,
                 )
+                repair_queue = repair_controller.load_repair_queue(state_root)
+                queue_state = repair_controller.apply_repair_queue_override(queue_state, repair_queue)
+                repair_summary = repair_controller.build_repair_summary(repair_queue, repair_policy)
                 provider_storage_state = maybe_prepare_provider_storage(policy, state_root, events_path, queue_state)
                 atomic_write_json(state_root / "queue.json", queue_state)
             maybe_record_supervisor_exit(state_root, queue_state, supervisor_proc)
@@ -2090,6 +2159,7 @@ def main() -> int:
                 provider_storage_state,
                 overrides,
                 spend_campaign,
+                repair_summary,
             )
             atomic_write_json(state_root / "executive_state.json", executive_state)
             write_working_memory(state_root, executive_state)
@@ -2101,6 +2171,7 @@ def main() -> int:
                 frontier_snapshot,
                 queue_state,
                 provider_storage_state,
+                repair_summary,
                 dashboard_proc,
                 supervisor_proc,
             )
@@ -2115,6 +2186,7 @@ def main() -> int:
                     budget_state,
                     queue_state,
                     frontier_snapshot,
+                    repair_summary,
                 ),
             )
             queue_due = now + float(policy["poll_intervals_seconds"]["queue"])
