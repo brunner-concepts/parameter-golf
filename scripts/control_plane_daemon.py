@@ -9,6 +9,8 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -47,6 +49,22 @@ def append_jsonl(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, sort_keys=True) + "\n")
+
+
+def tail_text(path: Path, lines: int = 40) -> str:
+    if not path.exists():
+        return ""
+    content = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    return "\n".join(content[-lines:])
+
+
+def parse_utc_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 def read_json_if_exists(path: Path) -> dict[str, Any]:
@@ -90,6 +108,46 @@ def github_request(url: str) -> urllib.request.Request:
             "X-GitHub-Api-Version": "2022-11-28",
         },
     )
+
+
+def maybe_notify_webhook(webhook_url: str | None, title: str, body: str) -> None:
+    if not webhook_url:
+        return
+    payload = json.dumps({"title": title, "body": body}).encode("utf-8")
+    request = urllib.request.Request(
+        webhook_url,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15):
+            pass
+    except (urllib.error.URLError, TimeoutError):
+        pass
+
+
+def maybe_notify_telegram(bot_token: str | None, chat_id: str | None, title: str, body: str) -> None:
+    if not bot_token or not chat_id:
+        return
+    text = f"{title}\n{body}"
+    payload = urllib.parse.urlencode({"chat_id": chat_id, "text": text}).encode("utf-8")
+    request = urllib.request.Request(
+        f"https://api.telegram.org/bot{bot_token}/sendMessage",
+        data=payload,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15):
+            pass
+    except (urllib.error.URLError, TimeoutError):
+        pass
+
+
+def maybe_emit_notification(title: str, body: str) -> None:
+    maybe_notify_webhook(os.environ.get("RUN_NOTIFY_WEBHOOK_URL"), title, body)
+    maybe_notify_telegram(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"), title, body)
 
 
 def fetch_issue(issue_number: int) -> dict[str, Any]:
@@ -747,11 +805,14 @@ def maybe_launch_next(
         if env_value:
             command.extend([arg_name, env_value])
 
+    supervisor_log = state_root / f"{queue_state['next_run_id']}_supervisor.log"
+    supervisor_log.parent.mkdir(parents=True, exist_ok=True)
+    handle = supervisor_log.open("a", encoding="utf-8")
     proc = subprocess.Popen(
         command,
         cwd=str(repo_root()),
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=handle,
+        stderr=subprocess.STDOUT,
         start_new_session=True,
         text=True,
     )
@@ -766,7 +827,19 @@ def maybe_launch_next(
             "compute_tier": next_compute_tier,
             "reserve_usd": queue_state.get("required_reserve_usd", 0.0),
             "pid": proc.pid,
+            "log_path": str(supervisor_log),
         },
+    )
+    maybe_emit_notification(
+        "Parameter Golf launch started",
+        "\n".join(
+            [
+                f"run={queue_state['next_run_id']}",
+                f"target_pr={queue_state['next_target_pr']}",
+                f"tier={next_compute_tier}",
+                f"spec={next_spec}",
+            ]
+        ),
     )
     return proc
 
@@ -797,6 +870,137 @@ def build_operator_state(
         "queue_blocked": queue_state.get("blocked"),
         "queue_blocked_reason": queue_state.get("blocked_reason"),
     }
+
+
+def maybe_record_supervisor_exit(
+    state_root: Path,
+    queue_state: dict[str, Any],
+    supervisor_proc: subprocess.Popen[str] | None,
+) -> None:
+    if supervisor_proc is None:
+        return
+    exit_code = supervisor_proc.poll()
+    if exit_code is None:
+        return
+    marker_path = state_root / "last_supervisor_exit.json"
+    current = {
+        "pid": supervisor_proc.pid,
+        "exit_code": exit_code,
+        "run_id": queue_state.get("next_run_id"),
+        "timestamp": utc_now(),
+    }
+    previous = read_json_if_exists(marker_path)
+    if previous.get("pid") == current["pid"] and previous.get("exit_code") == current["exit_code"]:
+        return
+    atomic_write_json(marker_path, current)
+    log_path = state_root / f"{queue_state.get('next_run_id')}_supervisor.log"
+    append_jsonl(
+        state_root / "events.jsonl",
+        {
+            "event": "supervisor_exited",
+            "timestamp": current["timestamp"],
+            "pid": current["pid"],
+            "exit_code": current["exit_code"],
+            "run_id": current["run_id"],
+            "log_path": str(log_path),
+        },
+    )
+    maybe_emit_notification(
+        "Parameter Golf supervisor exited",
+        "\n".join(
+            [
+                f"run={current['run_id']}",
+                f"exit_code={current['exit_code']}",
+                f"log={log_path}",
+                "tail:",
+                tail_text(log_path) or "(empty)",
+            ]
+        )[:3500],
+    )
+
+
+def recover_orphaned_supervisor_states(
+    live_root: Path,
+    state_root: Path,
+    events_path: Path,
+    budget_state: dict[str, Any],
+    supervisor_proc: subprocess.Popen[str] | None,
+    grace_seconds: int = 300,
+    max_recoveries_per_run: int = 1,
+) -> None:
+    if supervisor_proc is not None and supervisor_proc.poll() is None:
+        return
+    if budget_state.get("active_pod_count", 0) > 0 or not live_root.exists():
+        return
+
+    recoveries_path = state_root / "orphan_recoveries.json"
+    recoveries = read_json_if_exists(recoveries_path)
+    now = datetime.now(timezone.utc)
+
+    for run_dir in sorted(live_root.iterdir()):
+        if not run_dir.is_dir():
+            continue
+        run_id = run_dir.name
+        supervisor_state_path = run_dir / "supervisor_state.json"
+        supervisor_state = read_json_if_exists(supervisor_state_path)
+        status = supervisor_state.get("status")
+        if status not in {"launching", "watching"}:
+            continue
+        if int(recoveries.get(run_id, 0)) >= max_recoveries_per_run:
+            continue
+
+        current_state = read_json_if_exists(run_dir / "current_state.json")
+        terminal_result = read_json_if_exists(run_dir / "terminal_result.json")
+        if current_state.get("status") in ACTIVE_RUN_STATUSES:
+            continue
+        if terminal_result.get("status") in TERMINAL_STATUSES:
+            continue
+
+        updated_at = parse_utc_timestamp(supervisor_state.get("updated_at"))
+        if updated_at is None or (now - updated_at).total_seconds() < grace_seconds:
+            continue
+
+        recovered_state = dict(supervisor_state)
+        recovered_state.update(
+            {
+                "updated_at": utc_now(),
+                "status": "infra_recovered_orphan",
+                "recovered_by": "control_plane_daemon",
+                "previous_status": status,
+            }
+        )
+        atomic_write_json(supervisor_state_path, recovered_state)
+        append_jsonl(
+            run_dir / "supervisor_events.jsonl",
+            {
+                "event": "orphaned_supervisor_state_recovered",
+                "timestamp": utc_now(),
+                "run_id": run_id,
+                "previous_status": status,
+            },
+        )
+        recoveries[run_id] = int(recoveries.get(run_id, 0)) + 1
+        atomic_write_json(recoveries_path, recoveries)
+        append_jsonl(
+            events_path,
+            {
+                "event": "orphaned_supervisor_state_recovered",
+                "timestamp": utc_now(),
+                "run_id": run_id,
+                "previous_status": status,
+                "recovery_count": recoveries[run_id],
+            },
+        )
+        maybe_emit_notification(
+            "Parameter Golf orphan recovery",
+            "\n".join(
+                [
+                    f"run={run_id}",
+                    f"previous_status={status}",
+                    f"recovery_count={recoveries[run_id]}",
+                ]
+            ),
+        )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -850,6 +1054,7 @@ def main() -> int:
             budget_state = refresh_budget(policy, state_root, events_path)
             budget_due = now + float(policy["poll_intervals_seconds"]["budget"])
         if now >= queue_due:
+            recover_orphaned_supervisor_states(live_root, state_root, events_path, budget_state, supervisor_proc)
             queue_state = evaluate_queue(policy, frontier_snapshot, budget_state, live_root, generated_specs, supervisor_proc)
             atomic_write_json(state_root / "queue.json", queue_state)
             append_jsonl(
@@ -864,6 +1069,7 @@ def main() -> int:
             )
             if not args.no_launch and supervisor_proc is None and queue_state.get("next_spec") and not queue_state.get("blocked"):
                 supervisor_proc = maybe_launch_next(queue_state, state_root, policy)
+            maybe_record_supervisor_exit(state_root, queue_state, supervisor_proc)
             if supervisor_proc is not None and supervisor_proc.poll() is not None:
                 supervisor_proc = None
             operator_state = build_operator_state(
