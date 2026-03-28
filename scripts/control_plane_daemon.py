@@ -269,6 +269,7 @@ def sync_frontier(
     control_root: Path,
     state_root: Path,
     events_path: Path,
+    previous_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     upstream_root = control_root / "upstream_prs"
     manifest_path = upstream_root / "manifest.json"
@@ -281,29 +282,70 @@ def sync_frontier(
         "--manifest",
         str(manifest_path),
     ]
-    sync_result = run_subprocess(sync_cmd, cwd=repo_root())
-    issue = fetch_issue(int(policy["frontier"]["issue_number"]))
+    sync_error = ""
+    sync_stdout = ""
+    sync_stderr = ""
+    try:
+        sync_result = run_subprocess(sync_cmd, cwd=repo_root())
+        sync_stdout = sync_result.stdout.strip()
+        sync_stderr = sync_result.stderr.strip()
+    except subprocess.CalledProcessError as exc:
+        sync_stdout = (exc.stdout or "").strip()
+        sync_stderr = (exc.stderr or "").strip()
+        sync_error = f"sync_repro_targets_failed exit={exc.returncode}"
+
     manifest = read_json_if_exists(manifest_path)
-    ranked_targets = rank_targets(policy, manifest)
+    if manifest:
+        ranked_targets = rank_targets(policy, manifest)
+    else:
+        ranked_targets = (previous_snapshot or {}).get("targets", [])
+
+    try:
+        issue = fetch_issue(int(policy["frontier"]["issue_number"]))
+    except (urllib.error.URLError, TimeoutError) as exc:
+        issue = (previous_snapshot or {}).get("issue", {})
+        if not issue:
+            issue = {
+                "number": int(policy["frontier"]["issue_number"]),
+                "title": "frontier issue unavailable",
+                "html_url": f"https://github.com/openai/parameter-golf/issues/{int(policy['frontier']['issue_number'])}",
+                "state": "unknown",
+                "updated_at": utc_now(),
+                "body_excerpt": "",
+            }
+        sync_error = sync_error or f"frontier_issue_fetch_failed: {exc}"
+
     advisory_root = control_root / "advisory"
     write_legality_memos(advisory_root, ranked_targets, issue)
     snapshot = {
         "updated_at": utc_now(),
         "issue": issue,
-        "sync_stdout": sync_result.stdout.strip(),
-        "sync_stderr": sync_result.stderr.strip(),
+        "sync_stdout": sync_stdout,
+        "sync_stderr": sync_stderr,
+        "sync_error": sync_error,
         "manifest_path": str(manifest_path),
         "targets": ranked_targets,
     }
     atomic_write_json(state_root / "frontier_snapshot.json", snapshot)
-    append_jsonl(
-        events_path,
-        {
-            "event": "frontier_synced",
-            "timestamp": snapshot["updated_at"],
-            "top_target": ranked_targets[0]["pr"] if ranked_targets else None,
-        },
-    )
+    event = {
+        "timestamp": snapshot["updated_at"],
+        "top_target": ranked_targets[0]["pr"] if ranked_targets else None,
+    }
+    if sync_error:
+        event["event"] = "frontier_sync_degraded"
+        event["sync_error"] = sync_error
+        maybe_emit_notification(
+            "Parameter Golf frontier sync degraded",
+            "\n".join(
+                [
+                    sync_error,
+                    sync_stderr or sync_stdout or "using cached frontier snapshot",
+                ]
+            )[:3500],
+        )
+    else:
+        event["event"] = "frontier_synced"
+    append_jsonl(events_path, event)
     return snapshot
 
 
@@ -1047,7 +1089,7 @@ def main() -> int:
     while True:
         now = time.monotonic()
         if now >= frontier_due or not frontier_snapshot:
-            frontier_snapshot = sync_frontier(policy, control_root, state_root, events_path)
+            frontier_snapshot = sync_frontier(policy, control_root, state_root, events_path, frontier_snapshot)
             frontier_due = now + float(policy["poll_intervals_seconds"]["frontier"])
             generated_specs = generate_specs(control_root)
         if now >= budget_due or not budget_state:
