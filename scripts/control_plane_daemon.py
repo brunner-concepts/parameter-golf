@@ -1059,8 +1059,6 @@ def maybe_launch_next(
 
     for env_name, arg_name in (
         ("RUN_NOTIFY_WEBHOOK_URL", "--webhook-url"),
-        ("TELEGRAM_BOT_TOKEN", "--telegram-bot-token"),
-        ("TELEGRAM_CHAT_ID", "--telegram-chat-id"),
     ):
         env_value = os.environ.get(env_name)
         if env_value:

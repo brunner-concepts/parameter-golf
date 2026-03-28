@@ -15,6 +15,8 @@ from typing import Any
 ACTIVE_RUN_STATUSES = {"launching", "running", "starting", "dry-run"}
 TERMINAL_RUN_STATUSES = {"complete", "failed", "dry-run-complete"}
 HEARTBEAT_INTERVAL_S = 15 * 60
+DELIVERY_NORMAL = "normal"
+DELIVERY_MATERIAL_ONLY = "material_only"
 
 
 def utc_now() -> str:
@@ -354,6 +356,8 @@ def help_message() -> str:
             "- pause",
             "- resume",
             "- cap 60",
+            "- quiet",
+            "- loud",
             "- why",
             "- decision",
             "- reset session",
@@ -379,6 +383,40 @@ def recent_decision_text(root: Path) -> str:
     if not lines:
         return "No recorded executive decisions yet."
     return "\n".join(lines[-3:])
+
+
+def quiet_phrase(text: str) -> bool:
+    lowered = text.lower()
+    phrases = (
+        "stop spamming",
+        "stay silent",
+        "go quiet",
+        "be quiet",
+        "silent until",
+        "quiet mode",
+    )
+    return any(phrase in lowered for phrase in phrases)
+
+
+def loud_phrase(text: str) -> bool:
+    lowered = text.lower()
+    phrases = (
+        "resume updates",
+        "be proactive again",
+        "loud mode",
+        "normal mode",
+        "send updates again",
+    )
+    return any(phrase in lowered for phrase in phrases)
+
+
+def set_delivery_mode(state: dict[str, Any], chat_id: str, mode: str) -> None:
+    delivery_modes = state.setdefault("delivery_modes", {})
+    delivery_modes[chat_id] = mode
+
+
+def get_delivery_mode(state: dict[str, Any], chat_id: str) -> str:
+    return str((state.get("delivery_modes") or {}).get(chat_id, DELIVERY_NORMAL))
 
 
 def deterministic_reply(root: Path, live_root: Path, user_text: str) -> str | None:
@@ -465,10 +503,12 @@ def main() -> int:
     offset = state.get("offset")
     chats = state.get("chats", {})
     threads = state.get("threads", {})
+    delivery_modes = state.get("delivery_modes", {})
     initialized = bool(state)
 
     while True:
         snapshots = {snap["run_id"]: snap for snap in [run_snapshot(run_dir) for run_dir in all_run_dirs(live_root)]}
+        delivery_mode = str(delivery_modes.get(str(args.chat_id), DELIVERY_NORMAL))
         if not initialized:
             for run_id, snapshot in snapshots.items():
                 sent[run_id] = state_key(snapshot)
@@ -476,11 +516,16 @@ def main() -> int:
 
         for run_id, snapshot in snapshots.items():
             current_key = state_key(snapshot)
-            if sent.get(run_id) != current_key and (snapshot.get("phase_id") or snapshot.get("terminal_status")):
+            is_material = snapshot.get("terminal_status") in TERMINAL_RUN_STATUSES or snapshot.get("run_status") in TERMINAL_RUN_STATUSES
+            if (
+                sent.get(run_id) != current_key
+                and (snapshot.get("phase_id") or snapshot.get("terminal_status"))
+                and (delivery_mode != DELIVERY_MATERIAL_ONLY or is_material)
+            ):
                 send_telegram(args.bot_token, args.chat_id, proactive_message(snapshot))
                 sent[run_id] = current_key
                 heartbeats[run_id] = utc_now()
-            elif snapshot.get("run_status") in ACTIVE_RUN_STATUSES:
+            elif snapshot.get("run_status") in ACTIVE_RUN_STATUSES and delivery_mode != DELIVERY_MATERIAL_ONLY:
                 last_heartbeat_at = parse_iso(heartbeats.get(run_id))
                 now = datetime.now(timezone.utc)
                 if not last_heartbeat_at or (now - last_heartbeat_at).total_seconds() >= HEARTBEAT_INTERVAL_S:
@@ -506,6 +551,12 @@ def main() -> int:
                 threads.pop(chat_id, None)
                 chats[chat_id] = []
                 reply = "Parameter Golf Bot\nSession reset. Ask naturally again."
+            elif user_text.lower() in {"quiet", "/quiet"} or quiet_phrase(user_text):
+                delivery_modes[chat_id] = DELIVERY_MATERIAL_ONLY
+                reply = "Understood. I will stay silent unless there is a material outcome or terminal change."
+            elif user_text.lower() in {"loud", "/loud"} or loud_phrase(user_text):
+                delivery_modes[chat_id] = DELIVERY_NORMAL
+                reply = "Understood. Normal proactive updates are back on."
             else:
                 transcript.append({"role": "user", "text": user_text, "timestamp": utc_now()})
                 reply = deterministic_reply(root, live_root, user_text)
@@ -539,6 +590,7 @@ def main() -> int:
                 "heartbeats": heartbeats,
                 "chats": chats,
                 "threads": threads,
+                "delivery_modes": delivery_modes,
             },
         )
         time.sleep(args.poll_interval)
