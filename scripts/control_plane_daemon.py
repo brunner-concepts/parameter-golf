@@ -12,9 +12,11 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+
+import provider_storage_manager
 
 
 API_ROOT = "https://api.github.com/repos/openai/parameter-golf"
@@ -89,6 +91,11 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
         except json.JSONDecodeError:
             continue
     return rows
+
+
+def tail_jsonl(path: Path, limit: int = 5) -> list[dict[str, Any]]:
+    rows = read_jsonl(path)
+    return rows[-limit:]
 
 
 def run_json(cmd: list[str]) -> Any:
@@ -269,6 +276,42 @@ def write_legality_memos(
     atomic_write_text(advisory_root / "README.md", "\n".join(index_lines).strip() + "\n")
 
 
+def load_overrides(state_root: Path) -> dict[str, Any]:
+    return read_json_if_exists(state_root / "operator_overrides.json")
+
+
+def billing_window_bounds() -> tuple[str, str, str]:
+    now = datetime.now(timezone.utc)
+    start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+    end = start + timedelta(days=1)
+    return (
+        start.isoformat().replace("+00:00", "Z"),
+        end.isoformat().replace("+00:00", "Z"),
+        start.date().isoformat(),
+    )
+
+
+def sum_billing_entries(cmd: list[str]) -> tuple[float, list[dict[str, Any]], str]:
+    try:
+        rows = run_json(cmd)
+        if not isinstance(rows, list):
+            return 0.0, [], "unexpected_billing_shape"
+        total = sum(float(row.get("amount", 0.0)) for row in rows)
+        return round(total, 4), rows, ""
+    except subprocess.CalledProcessError as exc:
+        return 0.0, [], f"billing_failed exit={exc.returncode}"
+
+
+def effective_daily_cap(policy: dict[str, Any], overrides: dict[str, Any]) -> float:
+    override_value = overrides.get("daily_cap_usd")
+    if override_value is not None:
+        try:
+            return float(override_value)
+        except (TypeError, ValueError):
+            pass
+    return float(policy["daily_caps"]["runpod_usd"])
+
+
 def sync_frontier(
     policy: dict[str, Any],
     control_root: Path,
@@ -358,27 +401,63 @@ def refresh_budget(
     policy: dict[str, Any],
     state_root: Path,
     events_path: Path,
+    overrides: dict[str, Any],
 ) -> dict[str, Any]:
     user = run_json(["runpodctl", "user"])
     pods = run_json(["runpodctl", "pod", "list", "--all"])
     running_pods = [pod for pod in pods if str(pod.get("desiredStatus")) == "RUNNING"]
-    launch_events = read_jsonl(state_root / "launch_events.jsonl")
-    today = datetime.now(timezone.utc).date().isoformat()
-    reserved_today = sum(
-        float(event.get("reserve_usd", 0.0))
-        for event in launch_events
-        if str(event.get("timestamp", "")).startswith(today)
+    start_time, end_time, today = billing_window_bounds()
+    pod_spend_today, pod_billing_rows, pod_billing_error = sum_billing_entries(
+        [
+            "runpodctl",
+            "billing",
+            "pods",
+            "--bucket-size",
+            "day",
+            "--grouping",
+            "podId",
+            "--start-time",
+            start_time,
+            "--end-time",
+            end_time,
+        ]
     )
+    volume_spend_today, volume_billing_rows, volume_billing_error = sum_billing_entries(
+        [
+            "runpodctl",
+            "billing",
+            "network-volume",
+            "--bucket-size",
+            "day",
+            "--start-time",
+            start_time,
+            "--end-time",
+            end_time,
+        ]
+    )
+    spent_today = round(pod_spend_today + volume_spend_today, 4)
+    daily_cap = effective_daily_cap(policy, overrides)
     budget_state = {
         "updated_at": utc_now(),
+        "billing_window_start": start_time,
+        "billing_window_end": end_time,
+        "billing_day": today,
         "client_balance": float(user["clientBalance"]),
         "spend_limit_per_hr": float(user.get("spendLimit", 0.0)),
         "current_spend_per_hr": float(user.get("currentSpendPerHr", 0.0)),
         "active_pod_count": len(running_pods),
         "active_pods": running_pods,
-        "reserved_today_usd": round(reserved_today, 4),
-        "daily_cap_usd": float(policy["daily_caps"]["runpod_usd"]),
+        "spent_today_usd": spent_today,
+        "reserved_today_usd": spent_today,
+        "daily_cap_usd": daily_cap,
         "minimum_runpod_balance_reserve_usd": float(policy["daily_caps"]["minimum_runpod_balance_reserve_usd"]),
+        "budget_source": "actual_billed_spend_plus_reserve",
+        "pod_spend_today_usd": pod_spend_today,
+        "network_volume_spend_today_usd": volume_spend_today,
+        "pod_billing_rows": pod_billing_rows,
+        "network_volume_billing_rows": volume_billing_rows,
+        "billing_errors": [item for item in (pod_billing_error, volume_billing_error) if item],
+        "paused": bool(overrides.get("paused", False)),
     }
     atomic_write_json(state_root / "budget_state.json", budget_state)
     append_jsonl(
@@ -388,7 +467,8 @@ def refresh_budget(
             "timestamp": budget_state["updated_at"],
             "client_balance": budget_state["client_balance"],
             "active_pod_count": budget_state["active_pod_count"],
-            "reserved_today_usd": budget_state["reserved_today_usd"],
+            "spent_today_usd": budget_state["spent_today_usd"],
+            "daily_cap_usd": budget_state["daily_cap_usd"],
         },
     )
     return budget_state
@@ -750,6 +830,7 @@ def evaluate_queue(
     live_root: Path,
     generated_specs: dict[str, dict[str, Path]],
     supervisor_proc: subprocess.Popen[str] | None,
+    overrides: dict[str, Any],
 ) -> dict[str, Any]:
     queue_state: dict[str, Any] = {
         "updated_at": utc_now(),
@@ -762,6 +843,10 @@ def evaluate_queue(
         "next_run_id": None,
         "next_target_pr": None,
     }
+    if bool(overrides.get("paused", False)):
+        queue_state["blocked"] = True
+        queue_state["blocked_reason"] = "paused_by_override"
+        return queue_state
     if supervisor_proc is not None and supervisor_proc.poll() is None:
         queue_state["active_supervisor"] = active_supervisor_run(live_root)
         if queue_state["active_supervisor"]:
@@ -820,12 +905,13 @@ def evaluate_queue(
     reserve_usd = COST_ESTIMATES.get(tier, 0.0) * reserve_hours
     minimum_balance = float(policy["daily_caps"]["minimum_runpod_balance_reserve_usd"])
     available_balance = float(budget_state["client_balance"])
-    reserved_today = float(budget_state["reserved_today_usd"])
-    daily_cap = float(policy["daily_caps"]["runpod_usd"])
-    if reserved_today + reserve_usd > daily_cap:
+    spent_today = float(budget_state.get("spent_today_usd", budget_state.get("reserved_today_usd", 0.0)))
+    daily_cap = float(budget_state.get("daily_cap_usd", policy["daily_caps"]["runpod_usd"]))
+    if spent_today + reserve_usd > daily_cap:
         queue_state["blocked"] = True
         queue_state["blocked_reason"] = "daily_cap_would_be_exceeded"
         queue_state["required_reserve_usd"] = round(reserve_usd, 4)
+        queue_state["projected_spend_today_usd"] = round(spent_today + reserve_usd, 4)
         return queue_state
     if available_balance - reserve_usd < minimum_balance:
         queue_state["blocked"] = True
@@ -869,10 +955,65 @@ def start_dashboard_if_needed(host: str, port: int, live_root: Path, control_roo
     )
 
 
+def provider_storage_config(policy: dict[str, Any]) -> dict[str, Any]:
+    config = dict(policy.get("provider_storage") or {})
+    if "flash_attn_local_path" not in config:
+        config["flash_attn_local_path"] = str((repo_root() / "11_RUN_CONTROL/cache/flash_attn_3_py312_6362bd3.tar.zst").resolve())
+    return config
+
+
+def maybe_prepare_provider_storage(
+    policy: dict[str, Any],
+    state_root: Path,
+    events_path: Path,
+    queue_state: dict[str, Any],
+) -> dict[str, Any]:
+    state_path = state_root / "provider_storage_state.json"
+    config = provider_storage_config(policy)
+    if not config.get("enabled", False):
+        return read_json_if_exists(state_path)
+    if queue_state.get("blocked"):
+        return read_json_if_exists(state_path)
+    if queue_state.get("next_compute_tier") != "8xH100-SXM":
+        return read_json_if_exists(state_path)
+    try:
+        state = provider_storage_manager.ensure_storage_ready(config, state_path, state_root / "decisions.jsonl")
+    except Exception as exc:
+        state = read_json_if_exists(state_path)
+        append_jsonl(
+            events_path,
+            {
+                "event": "provider_storage_setup_failed",
+                "timestamp": utc_now(),
+                "error": str(exc),
+                "next_run_id": queue_state.get("next_run_id"),
+            },
+        )
+        maybe_emit_notification(
+            "Parameter Golf provider storage failed",
+            "\n".join(
+                [
+                    f"run={queue_state.get('next_run_id')}",
+                    f"error={str(exc)}",
+                ]
+            )[:3500],
+        )
+        queue_state["blocked"] = True
+        queue_state["blocked_reason"] = "provider_storage_setup_failed"
+        queue_state["provider_storage_error"] = str(exc)
+        return state
+    queue_state["provider_storage_ready"] = state.get("status") == "ready"
+    queue_state["provider_storage_volume_id"] = state.get("volume_id")
+    queue_state["provider_storage_data_center_id"] = state.get("data_center_id")
+    queue_state["provider_storage_remote_path"] = (state.get("seeded_flash_attn") or {}).get("remote_path")
+    return state
+
+
 def maybe_launch_next(
     queue_state: dict[str, Any],
     state_root: Path,
     policy: dict[str, Any],
+    provider_storage_state: dict[str, Any],
 ) -> subprocess.Popen[str] | None:
     next_spec = queue_state.get("next_spec")
     if queue_state.get("blocked") or not next_spec:
@@ -900,6 +1041,21 @@ def maybe_launch_next(
         smoke_gpu = policy.get("smoke_gpu_id")
         if smoke_gpu:
             command.extend(["--gpu-id", smoke_gpu, "--gpu-count", "1"])
+    elif provider_storage_state.get("status") == "ready":
+        remote_path = (provider_storage_state.get("seeded_flash_attn") or {}).get("remote_path")
+        if remote_path:
+            command.extend(
+                [
+                    "--network-volume-id",
+                    str(provider_storage_state["volume_id"]),
+                    "--data-center-id",
+                    str(provider_storage_state["data_center_id"]),
+                    "--volume-mount-path",
+                    str(provider_storage_state.get("mount_path", "/workspace/shared")),
+                    "--flash-attn-cache-remote-path",
+                    str(remote_path),
+                ]
+            )
 
     for env_name, arg_name in (
         ("RUN_NOTIFY_WEBHOOK_URL", "--webhook-url"),
@@ -949,12 +1105,169 @@ def maybe_launch_next(
     return proc
 
 
+def executive_diagnosis(
+    frontier_snapshot: dict[str, Any],
+    budget_state: dict[str, Any],
+    queue_state: dict[str, Any],
+    provider_storage_state: dict[str, Any],
+    overrides: dict[str, Any],
+) -> tuple[str, str, str]:
+    top_target = frontier_snapshot.get("targets", [{}])[0]
+    run_id = queue_state.get("next_run_id")
+    if overrides.get("paused"):
+        return (
+            "paused_by_override",
+            "Operator is paused by explicit override. No new compute will launch until resumed.",
+            "Wait for a resume command, then continue on the top-ranked approved target.",
+        )
+    if provider_storage_state.get("status") == "seeding":
+        remote_path = (provider_storage_state.get("seeded_flash_attn") or {}).get("remote_path") or provider_storage_state.get("flash_attn_remote_path")
+        return (
+            "provider_storage_seeding",
+            "Provider-side staging is in progress so full repro launches stop depending on Mac-to-pod cache copies.",
+            f"Finish seeding the shared FlashAttention cache at {remote_path}, then relaunch {run_id}.",
+        )
+    if queue_state.get("blocked") and queue_state.get("blocked_reason") == "provider_storage_setup_failed":
+        return (
+            "provider_storage_failed",
+            "The current bottleneck is provider storage setup, not model code.",
+            "Repair the provider storage path or reseed the shared cache, then relaunch the same approved full repro.",
+        )
+    if queue_state.get("blocked") and queue_state.get("blocked_reason") == "daily_cap_would_be_exceeded":
+        return (
+            "budget_gate",
+            "The operator stopped because projected spend would exceed the current daily cap.",
+            "Wait for the next budget window or raise the cap override if that is strategically justified.",
+        )
+    if queue_state.get("next_run_id"):
+        return (
+            "active_target_ready",
+            f"Continue on PR #{queue_state.get('next_target_pr')}, which remains the top-ranked approved target with the best acceptance-safety profile.",
+            f"Launch or continue {queue_state.get('next_run_id')} and only pivot targets if legality or execution evidence materially changes.",
+        )
+    return (
+        "frontier_wait",
+        f"Hold on PR #{top_target.get('pr')} while the operator state stabilizes.",
+        "Keep the queue single-threaded and avoid widening the search space before the current stepping-stone path is clean.",
+    )
+
+
+def build_executive_state(
+    policy: dict[str, Any],
+    state_root: Path,
+    budget_state: dict[str, Any],
+    frontier_snapshot: dict[str, Any],
+    queue_state: dict[str, Any],
+    provider_storage_state: dict[str, Any],
+    overrides: dict[str, Any],
+) -> dict[str, Any]:
+    diagnosis_key, diagnosis, next_action = executive_diagnosis(
+        frontier_snapshot,
+        budget_state,
+        queue_state,
+        provider_storage_state,
+        overrides,
+    )
+    return {
+        "updated_at": utc_now(),
+        "mode": "autonomous_operator_v2",
+        "diagnosis_key": diagnosis_key,
+        "diagnosis": diagnosis,
+        "next_autonomous_action": next_action,
+        "active_target_pr": queue_state.get("next_target_pr") or (frontier_snapshot.get("targets", [{}])[0].get("pr") if frontier_snapshot.get("targets") else None),
+        "active_run_id": queue_state.get("next_run_id"),
+        "queue_blocked": queue_state.get("blocked"),
+        "queue_blocked_reason": queue_state.get("blocked_reason"),
+        "budget": {
+            "client_balance": budget_state.get("client_balance"),
+            "spent_today_usd": budget_state.get("spent_today_usd"),
+            "daily_cap_usd": budget_state.get("daily_cap_usd"),
+            "current_spend_per_hr": budget_state.get("current_spend_per_hr"),
+            "reserve_floor_usd": budget_state.get("minimum_runpod_balance_reserve_usd"),
+        },
+        "provider_storage": {
+            "status": provider_storage_state.get("status"),
+            "volume_id": provider_storage_state.get("volume_id"),
+            "data_center_id": provider_storage_state.get("data_center_id"),
+            "mount_path": provider_storage_state.get("mount_path"),
+            "flash_attn_remote_path": (provider_storage_state.get("seeded_flash_attn") or {}).get("remote_path")
+            or provider_storage_state.get("flash_attn_remote_path"),
+            "seed_failures": provider_storage_state.get("seed_failures", 0),
+        },
+        "overrides": overrides,
+        "autonomy_scope": (policy.get("governance") or {}).get("autonomy_scope"),
+        "recent_decisions": tail_jsonl(state_root / "decisions.jsonl", 5),
+    }
+
+
+def write_working_memory(state_root: Path, executive_state: dict[str, Any]) -> None:
+    lines = [
+        "# Executive Working Memory",
+        "",
+        f"- updated_at: `{executive_state.get('updated_at')}`",
+        f"- diagnosis_key: `{executive_state.get('diagnosis_key')}`",
+        f"- active_target_pr: `{executive_state.get('active_target_pr')}`",
+        f"- active_run_id: `{executive_state.get('active_run_id')}`",
+        f"- queue_blocked: `{executive_state.get('queue_blocked')}`",
+        f"- queue_blocked_reason: `{executive_state.get('queue_blocked_reason')}`",
+        f"- spent_today_usd: `{executive_state.get('budget', {}).get('spent_today_usd')}`",
+        f"- daily_cap_usd: `{executive_state.get('budget', {}).get('daily_cap_usd')}`",
+        f"- provider_storage_status: `{executive_state.get('provider_storage', {}).get('status')}`",
+        "",
+        "## Diagnosis",
+        "",
+        executive_state.get("diagnosis") or "",
+        "",
+        "## Next Autonomous Action",
+        "",
+        executive_state.get("next_autonomous_action") or "",
+    ]
+    atomic_write_text(state_root / "working_memory.md", "\n".join(lines).strip() + "\n")
+
+
+def maybe_record_executive_change(
+    state_root: Path,
+    executive_state: dict[str, Any],
+) -> None:
+    marker_path = state_root / "executive_marker.json"
+    marker = {
+        "diagnosis_key": executive_state.get("diagnosis_key"),
+        "active_target_pr": executive_state.get("active_target_pr"),
+        "active_run_id": executive_state.get("active_run_id"),
+        "queue_blocked_reason": executive_state.get("queue_blocked_reason"),
+        "provider_storage_status": executive_state.get("provider_storage", {}).get("status"),
+        "next_autonomous_action": executive_state.get("next_autonomous_action"),
+    }
+    previous = read_json_if_exists(marker_path)
+    if previous == marker:
+        return
+    atomic_write_json(marker_path, marker)
+    event = {
+        "event": "executive_state_changed",
+        "timestamp": executive_state.get("updated_at"),
+        **marker,
+    }
+    append_jsonl(state_root / "decisions.jsonl", event)
+    maybe_emit_notification(
+        "Parameter Golf executive update",
+        "\n".join(
+            [
+                f"diagnosis={marker.get('diagnosis_key')}",
+                f"target_pr={marker.get('active_target_pr')}",
+                f"run={marker.get('active_run_id')}",
+                f"next={marker.get('next_autonomous_action')}",
+            ]
+        )[:3500],
+    )
+
+
 def build_operator_state(
     policy_path: Path,
     state_root: Path,
     budget_state: dict[str, Any],
     frontier_snapshot: dict[str, Any],
     queue_state: dict[str, Any],
+    provider_storage_state: dict[str, Any],
     dashboard_proc: subprocess.Popen[str] | None,
     supervisor_proc: subprocess.Popen[str] | None,
 ) -> dict[str, Any]:
@@ -971,11 +1284,14 @@ def build_operator_state(
         "active_run_id": queue_state.get("next_run_id"),
         "active_supervisor": queue_state.get("active_supervisor"),
         "client_balance": budget_state.get("client_balance"),
+        "spent_today_usd": budget_state.get("spent_today_usd"),
         "active_pod_count": budget_state.get("active_pod_count"),
         "active_pods": (budget_state.get("active_pods") or [])[:3],
         "top_ranked_target": frontier_snapshot.get("targets", [{}])[0].get("pr") if frontier_snapshot.get("targets") else None,
         "queue_blocked": queue_state.get("blocked"),
         "queue_blocked_reason": queue_state.get("blocked_reason"),
+        "provider_storage_status": provider_storage_state.get("status"),
+        "provider_storage_volume_id": provider_storage_state.get("volume_id"),
     }
 
 
@@ -1253,17 +1569,19 @@ def main() -> int:
     queue_due = 0.0
     frontier_snapshot = read_json_if_exists(state_root / "frontier_snapshot.json")
     budget_state = read_json_if_exists(state_root / "budget_state.json")
+    provider_storage_state = read_json_if_exists(state_root / "provider_storage_state.json")
     supervisor_proc: subprocess.Popen[str] | None = None
     generated_specs = generate_specs(control_root)
 
     while True:
+        overrides = load_overrides(state_root)
         now = time.monotonic()
         if now >= frontier_due or not frontier_snapshot:
             frontier_snapshot = sync_frontier(policy, control_root, state_root, events_path, frontier_snapshot)
             frontier_due = now + float(policy["poll_intervals_seconds"]["frontier"])
             generated_specs = generate_specs(control_root)
         if now >= budget_due or not budget_state:
-            budget_state = refresh_budget(policy, state_root, events_path)
+            budget_state = refresh_budget(policy, state_root, events_path, overrides)
             budget_due = now + float(policy["poll_intervals_seconds"]["budget"])
         if now >= queue_due:
             recover_stale_launch_pods(
@@ -1274,9 +1592,13 @@ def main() -> int:
                 supervisor_proc,
                 stale_seconds=int(policy.get("stale_launch_timeout_seconds", 180)),
             )
-            budget_state = refresh_budget(policy, state_root, events_path)
+            budget_state = refresh_budget(policy, state_root, events_path, overrides)
             recover_orphaned_supervisor_states(live_root, state_root, events_path, budget_state, supervisor_proc)
-            queue_state = evaluate_queue(policy, frontier_snapshot, budget_state, live_root, generated_specs, supervisor_proc)
+            queue_state = evaluate_queue(policy, frontier_snapshot, budget_state, live_root, generated_specs, supervisor_proc, overrides)
+            if args.no_launch:
+                provider_storage_state = read_json_if_exists(state_root / "provider_storage_state.json")
+            else:
+                provider_storage_state = maybe_prepare_provider_storage(policy, state_root, events_path, queue_state)
             atomic_write_json(state_root / "queue.json", queue_state)
             append_jsonl(
                 events_path,
@@ -1289,19 +1611,33 @@ def main() -> int:
                 },
             )
             if not args.no_launch and supervisor_proc is None and queue_state.get("next_spec") and not queue_state.get("blocked"):
-                supervisor_proc = maybe_launch_next(queue_state, state_root, policy)
-                budget_state = refresh_budget(policy, state_root, events_path)
-                queue_state = evaluate_queue(policy, frontier_snapshot, budget_state, live_root, generated_specs, supervisor_proc)
+                supervisor_proc = maybe_launch_next(queue_state, state_root, policy, provider_storage_state)
+                budget_state = refresh_budget(policy, state_root, events_path, overrides)
+                queue_state = evaluate_queue(policy, frontier_snapshot, budget_state, live_root, generated_specs, supervisor_proc, overrides)
+                provider_storage_state = maybe_prepare_provider_storage(policy, state_root, events_path, queue_state)
                 atomic_write_json(state_root / "queue.json", queue_state)
             maybe_record_supervisor_exit(state_root, queue_state, supervisor_proc)
             if supervisor_proc is not None and supervisor_proc.poll() is not None:
                 supervisor_proc = None
+            executive_state = build_executive_state(
+                policy,
+                state_root,
+                budget_state,
+                frontier_snapshot,
+                queue_state,
+                provider_storage_state,
+                overrides,
+            )
+            atomic_write_json(state_root / "executive_state.json", executive_state)
+            write_working_memory(state_root, executive_state)
+            maybe_record_executive_change(state_root, executive_state)
             operator_state = build_operator_state(
                 policy_path,
                 state_root,
                 budget_state,
                 frontier_snapshot,
                 queue_state,
+                provider_storage_state,
                 dashboard_proc,
                 supervisor_proc,
             )

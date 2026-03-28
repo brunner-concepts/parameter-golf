@@ -228,3 +228,19 @@ Cut the FlashAttention cache transport from a raw `1.5 GB` tarball to a compress
 1. Default all future FlashAttention transfers to the compressed `.tar.zst` artifact and restore it directly in bootstrap.
 2. Recycle any active pod stuck in a launch phase without a live supervisor after a short stale timeout.
 3. Treat launch transport and supervisor ownership as first-class operator health signals, not just pod liveness.
+
+## 2026-03-28 — Autonomous Operator V2 pivots from local upload retries to provider-side staging
+
+**Decision:**
+Promote the operator from a guarded retry loop into an executive control plane with provider-side staging, actual billed-spend accounting, and a Telegram control-room surface.
+
+**Rationale:**
+- The repeating failure mode is no longer research ambiguity; it is transport architecture. Re-copying even a compressed FlashAttention cache from the Mac to fresh 8x pods is still too fragile.
+- The prior budget model counted launch reservations instead of actual billed spend, which made the operator simultaneously overconfident in some places and too timid in others.
+- The prior Telegram layer exposed snapshots but did not expose the executive state or provide direct pause/resume/cap controls, which made the user an unnecessary bottleneck.
+
+**Consequences:**
+1. Full repros should prefer a seeded RunPod network volume over Mac-to-pod FlashAttention cache copies.
+2. `budget_state.json` should be driven by real RunPod billing history plus reserve checks, not only by launch reservations.
+3. `executive_state.json`, `working_memory.md`, and `decisions.jsonl` become first-class memory artifacts for the autonomous operator.
+4. Telegram becomes a control room over the executive layer, with deterministic `pause`, `resume`, `budget`, `why`, `decision`, and `cap` commands in addition to conversational Codex turns.

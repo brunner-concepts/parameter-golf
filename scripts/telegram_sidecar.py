@@ -178,11 +178,17 @@ def state_key(snapshot: dict[str, Any]) -> str:
 
 def build_live_context(root: Path, live_root: Path) -> str:
     operator_state = read_json(root / "11_RUN_CONTROL/control_plane/state/operator_state.json")
+    executive_state = read_json(root / "11_RUN_CONTROL/control_plane/state/executive_state.json")
     budget_state = read_json(root / "11_RUN_CONTROL/control_plane/state/budget_state.json")
     queue_state = read_json(root / "11_RUN_CONTROL/control_plane/state/queue.json")
+    provider_storage_state = read_json(root / "11_RUN_CONTROL/control_plane/state/provider_storage_state.json")
+    decisions_path = root / "11_RUN_CONTROL/control_plane/state/decisions.jsonl"
+    decision_lines = read_text(decisions_path).splitlines()[-5:]
     snapshot = active_snapshot(live_root)
 
     context = {
+        "executive_state": executive_state,
+        "provider_storage_state": provider_storage_state,
         "operator_state": {
             "queue_blocked": operator_state.get("queue_blocked"),
             "queue_blocked_reason": operator_state.get("queue_blocked_reason"),
@@ -207,6 +213,7 @@ def build_live_context(root: Path, live_root: Path) -> str:
             "candidates": (queue_state.get("candidates") or [])[:3],
             "updated_at": queue_state.get("updated_at"),
         },
+        "recent_decisions_jsonl_tail": decision_lines,
         "active_or_latest_run": {
             "run_id": snapshot.get("run_id") if snapshot else None,
             "run_status": snapshot.get("run_status") if snapshot else None,
@@ -344,9 +351,97 @@ def help_message() -> str:
             "- what is the strategy?",
             "- what should we do next?",
             "- how is the budget looking?",
+            "- pause",
+            "- resume",
+            "- cap 60",
+            "- why",
+            "- decision",
             "- reset session",
         ]
     )
+
+
+def overrides_path(root: Path) -> Path:
+    return root / "11_RUN_CONTROL/control_plane/state/operator_overrides.json"
+
+
+def write_overrides(path: Path, payload: dict[str, Any]) -> None:
+    atomic_write_json(path, payload)
+
+
+def read_overrides(path: Path) -> dict[str, Any]:
+    return read_json(path)
+
+
+def recent_decision_text(root: Path) -> str:
+    decisions_path = root / "11_RUN_CONTROL/control_plane/state/decisions.jsonl"
+    lines = [line for line in read_text(decisions_path).splitlines() if line.strip()]
+    if not lines:
+        return "No recorded executive decisions yet."
+    return "\n".join(lines[-3:])
+
+
+def deterministic_reply(root: Path, live_root: Path, user_text: str) -> str | None:
+    text = user_text.strip().lower()
+    executive_state = read_json(root / "11_RUN_CONTROL/control_plane/state/executive_state.json")
+    budget_state = read_json(root / "11_RUN_CONTROL/control_plane/state/budget_state.json")
+    snapshot = active_snapshot(live_root) or {}
+    override_path = overrides_path(root)
+    overrides = read_overrides(override_path)
+
+    if text in {"pause", "/pause"}:
+        overrides["paused"] = True
+        overrides["updated_at"] = utc_now()
+        write_overrides(override_path, overrides)
+        return "Paused. The operator will keep observing state, but it will not launch new compute until resumed."
+    if text in {"resume", "/resume"}:
+        overrides["paused"] = False
+        overrides["updated_at"] = utc_now()
+        write_overrides(override_path, overrides)
+        return "Resumed. The operator can launch approved work again on the next control-plane cycle."
+    if text.startswith("cap "):
+        try:
+            cap_value = float(text.split(None, 1)[1])
+        except ValueError:
+            return "Use `cap <usd>` with a numeric daily cap, for example `cap 60`."
+        overrides["daily_cap_usd"] = cap_value
+        overrides["updated_at"] = utc_now()
+        write_overrides(override_path, overrides)
+        return f"Daily RunPod cap set to ${cap_value:.2f}. The control plane will use that on the next budget refresh."
+    if text in {"budget", "/budget"}:
+        return "\n".join(
+            [
+                "Parameter Golf Budget",
+                f"balance=${float(budget_state.get('client_balance', 0.0)):.2f}",
+                f"spent_today=${float(budget_state.get('spent_today_usd', 0.0)):.2f}",
+                f"daily_cap=${float(budget_state.get('daily_cap_usd', 0.0)):.2f}",
+                f"current_spend_per_hr=${float(budget_state.get('current_spend_per_hr', 0.0)):.3f}",
+            ]
+        )
+    if text in {"why", "/why", "decision", "/decision"}:
+        diagnosis = executive_state.get("diagnosis") or "No executive diagnosis recorded yet."
+        next_action = executive_state.get("next_autonomous_action") or "No next action recorded yet."
+        return "\n".join(
+            [
+                "Parameter Golf Executive View",
+                diagnosis,
+                "",
+                "Next action:",
+                next_action,
+                "",
+                "Recent decisions:",
+                recent_decision_text(root),
+            ]
+        )
+    if text in {"next", "/next"}:
+        return executive_state.get("next_autonomous_action") or "No next action recorded yet."
+    if text in {"status", "/status"}:
+        return proactive_message(snapshot) if snapshot else "No live run snapshot is available right now."
+    if text in {"strategy", "/strategy"}:
+        diagnosis = executive_state.get("diagnosis") or "No executive diagnosis recorded yet."
+        next_action = executive_state.get("next_autonomous_action") or "No next action recorded yet."
+        return "\n".join([diagnosis, "", "Next action:", next_action])
+    return None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -413,21 +508,23 @@ def main() -> int:
                 reply = "Parameter Golf Bot\nSession reset. Ask naturally again."
             else:
                 transcript.append({"role": "user", "text": user_text, "timestamp": utc_now()})
-                prompt = build_prompt(root, live_root, transcript, user_text)
-                try:
-                    reply, next_thread_id = run_codex_with_retry(root, prompt, thread_id)
-                    if next_thread_id:
-                        threads[chat_id] = next_thread_id
-                except (subprocess.CalledProcessError, subprocess.TimeoutExpired, RuntimeError) as exc:
-                    reply = "\n".join(
-                        [
-                            "Parameter Golf Bot",
-                            "The conversational backend failed on this turn.",
-                            f"Reason: {type(exc).__name__}",
-                            "",
-                            "Try again in a moment.",
-                        ]
-                    )
+                reply = deterministic_reply(root, live_root, user_text)
+                if reply is None:
+                    prompt = build_prompt(root, live_root, transcript, user_text)
+                    try:
+                        reply, next_thread_id = run_codex_with_retry(root, prompt, thread_id)
+                        if next_thread_id:
+                            threads[chat_id] = next_thread_id
+                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, RuntimeError) as exc:
+                        reply = "\n".join(
+                            [
+                                "Parameter Golf Bot",
+                                "The conversational backend failed on this turn.",
+                                f"Reason: {type(exc).__name__}",
+                                "",
+                                "Try again in a moment.",
+                            ]
+                        )
                 transcript.append({"role": "assistant", "text": reply, "timestamp": utc_now()})
                 chats[chat_id] = transcript[-12:]
 

@@ -32,10 +32,13 @@ def load_control_plane_payload(control_root: Path | None) -> dict[str, Any]:
     state_root = control_root / "state"
     return {
         "control_root": str(control_root),
+        "executive_state": read_json_if_exists(state_root / "executive_state.json"),
+        "provider_storage_state": read_json_if_exists(state_root / "provider_storage_state.json"),
         "operator_state": read_json_if_exists(state_root / "operator_state.json"),
         "frontier_snapshot": read_json_if_exists(state_root / "frontier_snapshot.json"),
         "budget_state": read_json_if_exists(state_root / "budget_state.json"),
         "queue": read_json_if_exists(state_root / "queue.json"),
+        "working_memory": read_text_if_exists(state_root / "working_memory.md"),
         "events": read_text_if_exists(state_root / "events.jsonl"),
     }
 
@@ -86,6 +89,8 @@ def render_control_plane(control: dict[str, Any]) -> str:
     if not control:
         return ""
     operator = control.get("operator_state") or {}
+    executive = control.get("executive_state") or {}
+    provider_storage = control.get("provider_storage_state") or {}
     budget = control.get("budget_state") or {}
     queue = control.get("queue") or {}
     frontier = control.get("frontier_snapshot") or {}
@@ -104,10 +109,18 @@ def render_control_plane(control: dict[str, Any]) -> str:
             "<h2>Control Plane</h2>",
             "<div class='grid'>",
             "<article class='card'>",
+            "<h3>Executive</h3>",
+            f"<p><strong>diagnosis</strong>: {html.escape(str(executive.get('diagnosis_key', 'unknown')))}</p>",
+            f"<p><strong>target</strong>: {html.escape(str(executive.get('active_target_pr', '')))}</p>",
+            f"<p><strong>next_action</strong>: {html.escape(str(executive.get('next_autonomous_action', '')))}</p>",
+            f"<p><strong>provider_storage</strong>: {html.escape(str(provider_storage.get('status') or (executive.get('provider_storage') or {}).get('status', '')))}</p>",
+            f"<p><strong>provider_volume</strong>: {html.escape(str(provider_storage.get('volume_id', '')))}</p>",
+            "</article>",
+            "<article class='card'>",
             "<h3>Budget</h3>",
             f"<p><strong>balance</strong>: ${html.escape(str(budget.get('client_balance', 'unknown')))}</p>",
             f"<p><strong>active_pods</strong>: {html.escape(str(budget.get('active_pod_count', 'unknown')))}</p>",
-            f"<p><strong>reserved_today</strong>: ${html.escape(str(budget.get('reserved_today_usd', 'unknown')))}</p>",
+            f"<p><strong>spent_today</strong>: ${html.escape(str(budget.get('spent_today_usd', budget.get('reserved_today_usd', 'unknown'))))}</p>",
             f"<p><strong>daily_cap</strong>: ${html.escape(str(budget.get('daily_cap_usd', 'unknown')))}</p>",
             "</article>",
             "<article class='card'>",
@@ -131,6 +144,10 @@ def render_control_plane(control: dict[str, Any]) -> str:
             "</ol>",
             "</article>",
             "</div>",
+            "<article class='card'>",
+            "<h3>Working Memory</h3>",
+            format_pre(control.get("working_memory") or ""),
+            "</article>",
             "</section>",
         ]
     )

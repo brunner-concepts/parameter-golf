@@ -44,6 +44,12 @@ Never auto-promotes to a more expensive compute tier. Never overrides the promot
 Pairs with a local mirror/notifier layer that copies run state off-pod so expensive runs remain observable even if the provider exits the machine.
 Recommended deployment target is the local guardrailed operator container (`docker-compose.local-operator.yml`) that owns RunPod launch, control-plane state, and the private dashboard. A remote always-on host remains optional, not required.
 
+### 10. Executive Operator
+
+Owns: diagnosis, topology pivots, provider-side staging, budget overrides within policy, and executive memory.
+This layer sits above the queue/supervisor/watchdog stack and is responsible for keeping the system moving without waiting for the user on ordinary infra failures.
+It may change execution topology inside the approved target family, but it may not widen research scope, ignore legality gates, or exceed balance-reserve rules.
+
 ## Execution phases
 
 ### Phase 0: Bootstrap
@@ -111,4 +117,21 @@ The Nissanbox operator additionally owns:
 
 The local operator additionally owns:
 - `scripts/control_plane_daemon.py` for frontier polling, budget governance, target ranking, and guarded auto-launch of approved specs only
+- `scripts/provider_storage_manager.py` for provider-side staging on RunPod network volumes
+- `11_RUN_CONTROL/control_plane/state/executive_state.json` for the current diagnosis, next autonomous action, and provider-storage readiness
+- `11_RUN_CONTROL/control_plane/state/working_memory.md` for a human-readable executive summary
+- `11_RUN_CONTROL/control_plane/state/decisions.jsonl` for durable executive decisions and topology pivots
 - `11_RUN_CONTROL/control_plane/` for policy, generated specs, advisory memos, and runtime snapshots
+
+## Control hierarchy
+
+The runtime org chart is now:
+
+1. `User / board` — capital allocator and final authority
+2. `Executive operator` — strategy, diagnosis, topology pivots, budget-aware autonomy
+3. `Control plane daemon` — queue evaluation, spend checks, launch orchestration
+4. `Operator supervisor` — same-spec infra retries and launch ownership
+5. `Run watchdog` — pod-local phase execution and terminal evidence
+6. `Mirror / Telegram / dashboard` — visibility and external reporting only
+
+This keeps the actual execution loop autonomous while making every state transition auditable from files on disk.

@@ -9,6 +9,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+import runpod_api
+
 
 DEFAULT_TEMPLATE_ID = "y5cejece4j"
 DEFAULT_FLASH_ATTN_CACHE = "11_RUN_CONTROL/cache/flash_attn_3_py312_6362bd3.tar.zst"
@@ -75,6 +77,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--flash-attn-cache-copy-timeout", type=int, default=480)
     parser.add_argument("--remote-launch-timeout", type=int, default=180)
     parser.add_argument("--flash-attn-cache-tarball")
+    parser.add_argument("--flash-attn-cache-remote-path")
+    parser.add_argument("--network-volume-id")
+    parser.add_argument("--data-center-id")
+    parser.add_argument("--volume-mount-path", default="/workspace")
     parser.add_argument("--min-balance", type=float)
     parser.add_argument("--notify-macos", action="store_true")
     parser.add_argument("--webhook-url")
@@ -85,50 +91,23 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def wait_for_ssh(pod_id: str, timeout_s: int) -> dict[str, Any]:
-    started = time.time()
-    last_status = "unknown"
-    while time.time() - started < timeout_s:
-        pod = run_json(["runpodctl", "pod", "get", pod_id])
-        last_status = str(pod.get("desiredStatus"))
-        ssh = pod.get("ssh") or {}
-        if pod.get("desiredStatus") == "RUNNING" and "ip" in ssh and "port" in ssh:
-            return pod
-        if last_status == "EXITED":
-            raise LaunchError(f"Pod {pod_id} exited before SSH became available.")
-        time.sleep(5)
-    raise LaunchError(f"Timed out waiting for SSH on pod {pod_id}; last status was {last_status}.")
+    try:
+        return runpod_api.wait_for_ssh(pod_id, timeout_s)
+    except runpod_api.RunPodApiError as exc:
+        raise LaunchError(str(exc)) from exc
 
 
 def remote_ssh_cmd(pod: dict[str, Any]) -> list[str]:
-    ssh = pod["ssh"]
-    return [
-        "ssh",
-        "-o",
-        "StrictHostKeyChecking=accept-new",
-        "-i",
-        str(ssh["ssh_key"]["path"]),
-        f"root@{ssh['ip']}",
-        "-p",
-        str(ssh["port"]),
-    ]
+    return runpod_api.remote_ssh_cmd(pod)
 
 
 def remote_scp_cmd(pod: dict[str, Any]) -> list[str]:
-    ssh = pod["ssh"]
-    return [
-        "scp",
-        "-O",
-        "-o",
-        "StrictHostKeyChecking=accept-new",
-        "-i",
-        str(ssh["ssh_key"]["path"]),
-        "-P",
-        str(ssh["port"]),
-    ]
+    return runpod_api.remote_scp_cmd(pod)
 
 
 def stop_pod_quietly(pod_id: str) -> None:
     subprocess.run(["runpodctl", "pod", "stop", pod_id], capture_output=True, text=True, check=False)
+    subprocess.run(["runpodctl", "pod", "delete", pod_id], capture_output=True, text=True, check=False)
 
 
 def build_remote_launch_command(
@@ -210,6 +189,54 @@ def build_mirror_command(args: argparse.Namespace, pod_id: str, local_dir: Path)
     return mirror_cmd
 
 
+def create_pod(args: argparse.Namespace, spec: dict[str, Any], pod_name: str, gpu_id: str, gpu_count: int) -> dict[str, Any]:
+    if args.network_volume_id:
+        payload: dict[str, Any] = {
+            "name": pod_name,
+            "cloudType": "SECURE",
+            "computeType": "GPU",
+            "templateId": args.template_id,
+            "gpuTypeIds": [gpu_id],
+            "gpuTypePriority": "availability",
+            "gpuCount": gpu_count,
+            "containerDiskInGb": int(args.container_disk_gb),
+            "volumeInGb": int(args.volume_gb),
+            "volumeMountPath": args.volume_mount_path,
+            "networkVolumeId": args.network_volume_id,
+            "ports": ["22/tcp"],
+            "supportPublicIp": True,
+            "interruptible": False,
+        }
+        if args.data_center_id:
+            payload["dataCenterIds"] = [args.data_center_id]
+            payload["dataCenterPriority"] = "availability"
+        create = runpod_api.create_pod(payload)
+        return create[0] if isinstance(create, list) else create
+
+    create = run_json(
+        [
+            "runpodctl",
+            "pod",
+            "create",
+            "--name",
+            pod_name,
+            "--template-id",
+            args.template_id,
+            "--gpu-id",
+            gpu_id,
+            "--gpu-count",
+            str(gpu_count),
+            "--container-disk-in-gb",
+            str(args.container_disk_gb),
+            "--volume-in-gb",
+            str(args.volume_gb),
+            "--ssh",
+        ]
+        + (["--data-center-ids", args.data_center_id] if args.data_center_id else [])
+    )
+    return create[0] if isinstance(create, list) else create
+
+
 def reset_live_dir(local_dir: Path) -> None:
     local_dir.mkdir(parents=True, exist_ok=True)
     for name in (
@@ -268,27 +295,7 @@ def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
     gpu_id = args.gpu_id or defaults["gpu_id"]
     gpu_count = args.gpu_count or defaults["gpu_count"]
     pod_name = args.pod_name or f"{spec['run_id']}-{gpu_count}x"
-    create = run_json(
-        [
-            "runpodctl",
-            "pod",
-            "create",
-            "--name",
-            pod_name,
-            "--template-id",
-            args.template_id,
-            "--gpu-id",
-            gpu_id,
-            "--gpu-count",
-            str(gpu_count),
-            "--container-disk-in-gb",
-            str(args.container_disk_gb),
-            "--volume-in-gb",
-            str(args.volume_gb),
-            "--ssh",
-        ]
-    )
-    pod = create[0] if isinstance(create, list) else create
+    pod = create_pod(args, spec, pod_name, gpu_id, gpu_count)
     pod_id = pod["id"]
     launch_summary: dict[str, Any] = {
         "pod_id": pod_id,
@@ -300,6 +307,9 @@ def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
         "compute_tier": spec.get("compute_tier"),
         "gpu_id": gpu_id,
         "gpu_count": gpu_count,
+        "network_volume_id": args.network_volume_id,
+        "data_center_id": args.data_center_id,
+        "volume_mount_path": args.volume_mount_path,
     }
     set_launch_phase(launch_summary, "pod_created")
     write_launch_summary(local_dir, launch_summary)
@@ -365,41 +375,78 @@ def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
         set_launch_phase(launch_summary, "spec_copied")
         write_launch_summary(local_dir, launch_summary)
         extra_env: dict[str, str] = {}
-        cache_path = resolve_flash_attn_cache(root, args)
-        if cache_path is not None:
-            remote_cache_path = Path("/workspace") / cache_path.name
-            launch_summary.update(
-                {
-                    "flash_attn_cache_tarball": str(cache_path),
-                    "remote_flash_attn_cache_tarball": str(remote_cache_path),
-                }
-            )
-            set_launch_phase(launch_summary, "copying_flash_attn_cache")
+        remote_cache_path_arg = getattr(args, "flash_attn_cache_remote_path", None)
+        if remote_cache_path_arg:
+            launch_summary["remote_flash_attn_cache_tarball"] = remote_cache_path_arg
+            set_launch_phase(launch_summary, "verifying_provider_cache")
             write_launch_summary(local_dir, launch_summary)
             try:
-                copy_proc = subprocess.run(
-                    scp_cmd + [str(cache_path), f"root@{pod['ssh']['ip']}:{remote_cache_path}"],
+                verify_proc = subprocess.run(
+                    ssh_cmd
+                    + [
+                        "python3 - <<'PY'\n"
+                        f"from pathlib import Path\npath = Path({remote_cache_path_arg!r})\n"
+                        "assert path.exists(), f'missing {path}'\n"
+                        "print(path.stat().st_size)\nPY"
+                    ],
                     capture_output=True,
                     text=True,
                     check=False,
-                    timeout=args.flash_attn_cache_copy_timeout,
+                    timeout=args.ssh_setup_timeout,
                 )
             except subprocess.TimeoutExpired as exc:
                 stop_pod_quietly(pod_id)
                 raise LaunchError(
-                    f"Timed out copying FlashAttention cache to pod {pod_id}: {timeout_details(exc)}",
+                    f"Timed out verifying provider cache on pod {pod_id}: {timeout_details(exc)}",
                     launch_summary,
                 ) from exc
-            if copy_proc.returncode != 0:
+            if verify_proc.returncode != 0:
                 stop_pod_quietly(pod_id)
-                details = copy_proc.stderr.strip() or copy_proc.stdout.strip() or f"scp exited {copy_proc.returncode}"
+                details = verify_proc.stderr.strip() or verify_proc.stdout.strip() or f"verify exited {verify_proc.returncode}"
                 raise LaunchError(
-                    f"Failed to copy FlashAttention cache to pod {pod_id}: {details}",
+                    f"Provider cache missing on pod {pod_id}: {details}",
                     launch_summary,
                 )
-            extra_env["FLASH_ATTN_CACHE_TARBALL"] = str(remote_cache_path)
-            set_launch_phase(launch_summary, "flash_attn_cache_copied")
+            extra_env["FLASH_ATTN_CACHE_TARBALL"] = remote_cache_path_arg
+            launch_summary["provider_cache_bytes"] = int((verify_proc.stdout or "0").strip().splitlines()[-1])
+            set_launch_phase(launch_summary, "provider_cache_ready")
             write_launch_summary(local_dir, launch_summary)
+        else:
+            cache_path = resolve_flash_attn_cache(root, args)
+            if cache_path is not None:
+                remote_cache_path = Path("/workspace") / cache_path.name
+                launch_summary.update(
+                    {
+                        "flash_attn_cache_tarball": str(cache_path),
+                        "remote_flash_attn_cache_tarball": str(remote_cache_path),
+                    }
+                )
+                set_launch_phase(launch_summary, "copying_flash_attn_cache")
+                write_launch_summary(local_dir, launch_summary)
+                try:
+                    copy_proc = subprocess.run(
+                        scp_cmd + [str(cache_path), f"root@{pod['ssh']['ip']}:{remote_cache_path}"],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                        timeout=args.flash_attn_cache_copy_timeout,
+                    )
+                except subprocess.TimeoutExpired as exc:
+                    stop_pod_quietly(pod_id)
+                    raise LaunchError(
+                        f"Timed out copying FlashAttention cache to pod {pod_id}: {timeout_details(exc)}",
+                        launch_summary,
+                    ) from exc
+                if copy_proc.returncode != 0:
+                    stop_pod_quietly(pod_id)
+                    details = copy_proc.stderr.strip() or copy_proc.stdout.strip() or f"scp exited {copy_proc.returncode}"
+                    raise LaunchError(
+                        f"Failed to copy FlashAttention cache to pod {pod_id}: {details}",
+                        launch_summary,
+                    )
+                extra_env["FLASH_ATTN_CACHE_TARBALL"] = str(remote_cache_path)
+                set_launch_phase(launch_summary, "flash_attn_cache_copied")
+                write_launch_summary(local_dir, launch_summary)
         remote_command = build_remote_launch_command(
             args.repo_ref,
             str(remote_spec_path),

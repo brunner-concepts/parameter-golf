@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "daily_caps": {
-    "runpod_usd": 120.0,
+    "runpod_usd": 200.0,
     "openai_usd": 4.0,
     "minimum_runpod_balance_reserve_usd": 25.0
   },
@@ -14,6 +14,16 @@
     "allow_auto_pr_open": false,
     "allow_subagent_spend": false,
     "autonomy_scope": "approved_specs_only"
+  },
+  "autonomy": {
+    "mode": "aggressive_auto",
+    "approved_target_family": [
+      868,
+      913,
+      933
+    ],
+    "allow_provider_storage": true,
+    "allow_topology_pivots": true
   },
   "ranking_weights": {
     "acceptance_safety": 0.4,
@@ -68,6 +78,9 @@
     "1xH100-smoke": 1.0,
     "8xH100-SXM": 1.0
   },
+  "budget_model": {
+    "source": "actual_billed_spend_plus_reserve"
+  },
   "poll_intervals_seconds": {
     "frontier": 600,
     "budget": 300,
@@ -78,6 +91,54 @@
     "spec_copy": 120,
     "flash_attn_cache_copy": 480,
     "remote_launch": 180
+  },
+  "provider_storage": {
+    "enabled": true,
+    "volume_name_prefix": "parameter-golf-shared-cache",
+    "size_gb": 50,
+    "mount_path": "/workspace/shared",
+    "flash_attn_asset_relative_path": "cache/flash_attn_3_py312_6362bd3.tar.zst",
+    "target_gpu_id": "NVIDIA H100 80GB HBM3",
+    "seed_gpu_id": "NVIDIA H100 80GB HBM3",
+    "template_id": "y5cejece4j",
+    "preferred_data_center_ids": [
+      "US-GA-2",
+      "US-KS-2",
+      "US-CA-2",
+      "US-MD-1",
+      "US-MO-2",
+      "US-NC-2",
+      "US-NC-1",
+      "CA-MTL-1"
+    ],
+    "seed_wait_timeout_seconds": 600,
+    "seed_copy_timeout_seconds": 1800,
+    "seed_container_disk_gb": 30,
+    "seed_volume_gb": 10,
+    "pivot_after_transport_failures": 2
+  },
+  "execution_sla": {
+    "launch_health_states": [
+      "pod_created",
+      "ssh_ready",
+      "spec_copied",
+      "provider_cache_ready",
+      "launching_remote_watchdog",
+      "active"
+    ],
+    "phase_progress_timeout_seconds": {
+      "copying_flash_attn_cache": 480
+    }
+  },
+  "failure_playbooks": {
+    "transport_failure": "pivot_to_provider_storage",
+    "stale_launch_without_owner": "kill_pod_and_relaunch",
+    "stale_supervisor_state": "mark_recovered_and_resume",
+    "provider_exit": "retry_once_then_reclassify"
+  },
+  "telegram": {
+    "enabled": true,
+    "mode": "control_room"
   },
   "stale_launch_timeout_seconds": 180,
   "stale_supervisor_state_timeout_seconds": 180
