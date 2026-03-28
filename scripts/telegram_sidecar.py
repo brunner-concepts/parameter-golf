@@ -14,6 +14,7 @@ from typing import Any
 
 ACTIVE_RUN_STATUSES = {"launching", "running", "starting", "dry-run"}
 TERMINAL_RUN_STATUSES = {"complete", "failed", "dry-run-complete"}
+HEARTBEAT_INTERVAL_S = 15 * 60
 
 
 def utc_now() -> str:
@@ -264,6 +265,32 @@ def parse_codex_jsonl(stdout: str) -> tuple[str | None, str | None]:
     return thread_id, reply
 
 
+def parse_iso(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def heartbeat_message(snapshot: dict[str, Any], last_sent_at: str | None) -> str:
+    lines = ["Parameter Golf Heartbeat", f"Run: {snapshot['run_id']}"]
+    if snapshot.get("pod_id"):
+        lines.append(f"Pod: {short_pod_id(snapshot['pod_id'])}")
+    if snapshot.get("pod_status"):
+        lines.append(f"Pod status: {snapshot['pod_status']}")
+    if snapshot.get("phase_id"):
+        lines.append(f"Phase: {snapshot['phase_id']}")
+    if snapshot.get("run_status"):
+        lines.append(f"Status: {snapshot['run_status']}")
+    if last_sent_at:
+        lines.append(f"Still in this state since at least: {last_sent_at}")
+    lines.append("")
+    lines.append("No phase transition yet. The operator is still alive and watching.")
+    return "\n".join(lines)
+
+
 def run_codex_turn(root: Path, prompt: str, thread_id: str | None) -> tuple[str, str | None]:
     cmd = [
         "codex",
@@ -336,6 +363,7 @@ def main() -> int:
     state_file = (root / args.state_file).resolve()
     state = read_json(state_file)
     sent = state.get("sent", {})
+    heartbeats = state.get("heartbeats", {})
     offset = state.get("offset")
     chats = state.get("chats", {})
     threads = state.get("threads", {})
@@ -353,6 +381,13 @@ def main() -> int:
             if sent.get(run_id) != current_key and (snapshot.get("phase_id") or snapshot.get("terminal_status")):
                 send_telegram(args.bot_token, args.chat_id, proactive_message(snapshot))
                 sent[run_id] = current_key
+                heartbeats[run_id] = utc_now()
+            elif snapshot.get("run_status") in ACTIVE_RUN_STATUSES:
+                last_heartbeat_at = parse_iso(heartbeats.get(run_id))
+                now = datetime.now(timezone.utc)
+                if not last_heartbeat_at or (now - last_heartbeat_at).total_seconds() >= HEARTBEAT_INTERVAL_S:
+                    send_telegram(args.bot_token, args.chat_id, heartbeat_message(snapshot, heartbeats.get(run_id)))
+                    heartbeats[run_id] = utc_now()
 
         for update in get_updates(args.bot_token, offset):
             offset = int(update["update_id"]) + 1
@@ -401,6 +436,7 @@ def main() -> int:
                 "updated_at": utc_now(),
                 "offset": offset,
                 "sent": sent,
+                "heartbeats": heartbeats,
                 "chats": chats,
                 "threads": threads,
             },
