@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "daily_caps": {
-    "runpod_usd": 45.0,
+    "runpod_usd": 80.0,
     "openai_usd": 4.0,
     "minimum_runpod_balance_reserve_usd": 25.0
   },
@@ -72,5 +72,12 @@
     "frontier": 600,
     "budget": 300,
     "queue": 60
-  }
+  },
+  "launch_timeouts_seconds": {
+    "ssh_setup": 60,
+    "spec_copy": 120,
+    "flash_attn_cache_copy": 480,
+    "remote_launch": 180
+  },
+  "stale_supervisor_state_timeout_seconds": 180
 }

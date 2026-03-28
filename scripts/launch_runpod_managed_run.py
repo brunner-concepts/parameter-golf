@@ -41,8 +41,8 @@ def run_json(cmd: list[str]) -> dict[str, Any]:
     return json.loads(proc.stdout)
 
 
-def run_text(cmd: list[str]) -> str:
-    proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
+def run_text(cmd: list[str], timeout: int | None = None) -> str:
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=timeout)
     return proc.stdout
 
 
@@ -70,6 +70,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--wait-timeout", type=int, default=600)
     parser.add_argument("--remote-launch-retries", type=int, default=3)
     parser.add_argument("--remote-launch-retry-delay", type=float, default=5.0)
+    parser.add_argument("--ssh-setup-timeout", type=int, default=60)
+    parser.add_argument("--spec-copy-timeout", type=int, default=120)
+    parser.add_argument("--flash-attn-cache-copy-timeout", type=int, default=480)
+    parser.add_argument("--remote-launch-timeout", type=int, default=180)
     parser.add_argument("--flash-attn-cache-tarball")
     parser.add_argument("--min-balance", type=float)
     parser.add_argument("--notify-macos", action="store_true")
@@ -146,7 +150,7 @@ def build_remote_launch_command(
         [
             "set -euo pipefail",
             "cd /workspace",
-            "if [[ ! -d parameter-golf/.git ]]; then git clone https://github.com/brunner-concepts/parameter-golf.git; fi",
+            "if [[ ! -d parameter-golf/.git ]]; then rm -rf /workspace/parameter-golf; git clone https://github.com/brunner-concepts/parameter-golf.git; fi",
             "cd /workspace/parameter-golf",
             "git fetch origin",
             f"git checkout {repo_ref}",
@@ -229,6 +233,20 @@ def write_launch_summary(local_dir: Path, launch_summary: dict[str, Any]) -> Non
     (local_dir / "launch.json").write_text(json.dumps(launch_summary, indent=2) + "\n", encoding="utf-8")
 
 
+def set_launch_phase(launch_summary: dict[str, Any], phase: str) -> None:
+    launch_summary["launch_phase"] = phase
+    launch_summary["launch_phase_started_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def timeout_details(exc: subprocess.TimeoutExpired) -> str:
+    parts = [f"timed out after {exc.timeout}s"]
+    if exc.stdout:
+        parts.append(str(exc.stdout).strip()[-500:])
+    if exc.stderr:
+        parts.append(str(exc.stderr).strip()[-500:])
+    return " | ".join(part for part in parts if part)
+
+
 def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
     root = repo_root()
     spec_path = Path(args.spec).resolve()
@@ -282,8 +300,8 @@ def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
         "compute_tier": spec.get("compute_tier"),
         "gpu_id": gpu_id,
         "gpu_count": gpu_count,
-        "launch_phase": "pod_created",
     }
+    set_launch_phase(launch_summary, "pod_created")
     write_launch_summary(local_dir, launch_summary)
 
     try:
@@ -292,19 +310,27 @@ def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
         scp_cmd = remote_scp_cmd(pod)
         launch_summary.update(
             {
-                "launch_phase": "ssh_ready",
                 "ssh_command": pod["ssh"]["ssh_command"],
             }
         )
+        set_launch_phase(launch_summary, "ssh_ready")
         write_launch_summary(local_dir, launch_summary)
         remote_spec_dir = Path(args.remote_state_dir) / "specs"
         remote_spec_path = remote_spec_dir / spec_path.name
-        mkdir_proc = subprocess.run(
-            ssh_cmd + [f"mkdir -p {shlex_quote(str(remote_spec_dir))}"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        try:
+            mkdir_proc = subprocess.run(
+                ssh_cmd + [f"mkdir -p {shlex_quote(str(remote_spec_dir))}"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=args.ssh_setup_timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            stop_pod_quietly(pod_id)
+            raise LaunchError(
+                f"Timed out preparing remote spec directory on pod {pod_id}: {timeout_details(exc)}",
+                launch_summary,
+            ) from exc
         if mkdir_proc.returncode != 0:
             stop_pod_quietly(pod_id)
             details = mkdir_proc.stderr.strip() or mkdir_proc.stdout.strip() or f"ssh exited {mkdir_proc.returncode}"
@@ -312,19 +338,23 @@ def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
                 f"Failed to create remote spec directory on pod {pod_id}: {details}",
                 launch_summary,
             )
-        launch_summary.update(
-            {
-                "launch_phase": "copying_spec",
-                "remote_spec_path": str(remote_spec_path),
-            }
-        )
+        launch_summary.update({"remote_spec_path": str(remote_spec_path)})
+        set_launch_phase(launch_summary, "copying_spec")
         write_launch_summary(local_dir, launch_summary)
-        spec_copy = subprocess.run(
-            scp_cmd + [str(spec_path), f"root@{pod['ssh']['ip']}:{remote_spec_path}"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        try:
+            spec_copy = subprocess.run(
+                scp_cmd + [str(spec_path), f"root@{pod['ssh']['ip']}:{remote_spec_path}"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=args.spec_copy_timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            stop_pod_quietly(pod_id)
+            raise LaunchError(
+                f"Timed out copying run spec to pod {pod_id}: {timeout_details(exc)}",
+                launch_summary,
+            ) from exc
         if spec_copy.returncode != 0:
             stop_pod_quietly(pod_id)
             details = spec_copy.stderr.strip() or spec_copy.stdout.strip() or f"scp exited {spec_copy.returncode}"
@@ -332,7 +362,7 @@ def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
                 f"Failed to copy run spec to pod {pod_id}: {details}",
                 launch_summary,
             )
-        launch_summary["launch_phase"] = "spec_copied"
+        set_launch_phase(launch_summary, "spec_copied")
         write_launch_summary(local_dir, launch_summary)
         extra_env: dict[str, str] = {}
         cache_path = resolve_flash_attn_cache(root, args)
@@ -340,18 +370,26 @@ def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
             remote_cache_path = Path("/workspace") / cache_path.name
             launch_summary.update(
                 {
-                    "launch_phase": "copying_flash_attn_cache",
                     "flash_attn_cache_tarball": str(cache_path),
                     "remote_flash_attn_cache_tarball": str(remote_cache_path),
                 }
             )
+            set_launch_phase(launch_summary, "copying_flash_attn_cache")
             write_launch_summary(local_dir, launch_summary)
-            copy_proc = subprocess.run(
-                scp_cmd + [str(cache_path), f"root@{pod['ssh']['ip']}:{remote_cache_path}"],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
+            try:
+                copy_proc = subprocess.run(
+                    scp_cmd + [str(cache_path), f"root@{pod['ssh']['ip']}:{remote_cache_path}"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=args.flash_attn_cache_copy_timeout,
+                )
+            except subprocess.TimeoutExpired as exc:
+                stop_pod_quietly(pod_id)
+                raise LaunchError(
+                    f"Timed out copying FlashAttention cache to pod {pod_id}: {timeout_details(exc)}",
+                    launch_summary,
+                ) from exc
             if copy_proc.returncode != 0:
                 stop_pod_quietly(pod_id)
                 details = copy_proc.stderr.strip() or copy_proc.stdout.strip() or f"scp exited {copy_proc.returncode}"
@@ -360,7 +398,7 @@ def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
                     launch_summary,
                 )
             extra_env["FLASH_ATTN_CACHE_TARBALL"] = str(remote_cache_path)
-            launch_summary["launch_phase"] = "flash_attn_cache_copied"
+            set_launch_phase(launch_summary, "flash_attn_cache_copied")
             write_launch_summary(local_dir, launch_summary)
         remote_command = build_remote_launch_command(
             args.repo_ref,
@@ -369,14 +407,19 @@ def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
             spec["run_id"],
             extra_env=extra_env,
         )
-        launch_summary["launch_phase"] = "launching_remote_watchdog"
+        set_launch_phase(launch_summary, "launching_remote_watchdog")
         write_launch_summary(local_dir, launch_summary)
         remote_error = None
         for attempt in range(1, remote_launch_retries + 1):
             try:
-                run_text(ssh_cmd + [remote_command])
+                run_text(ssh_cmd + [remote_command], timeout=args.remote_launch_timeout)
                 remote_error = None
                 break
+            except subprocess.TimeoutExpired as exc:
+                remote_error = exc
+                if attempt < remote_launch_retries:
+                    time.sleep(remote_launch_retry_delay)
+                    continue
             except subprocess.CalledProcessError as exc:
                 remote_error = exc
                 if attempt < remote_launch_retries:
@@ -384,7 +427,10 @@ def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
                     continue
         if remote_error is not None:
             stop_pod_quietly(pod_id)
-            details = remote_error.stderr.strip() or remote_error.stdout.strip() or str(remote_error)
+            if isinstance(remote_error, subprocess.TimeoutExpired):
+                details = timeout_details(remote_error)
+            else:
+                details = remote_error.stderr.strip() or remote_error.stdout.strip() or str(remote_error)
             raise LaunchError(f"Remote watchdog launch failed on pod {pod_id}: {details}", launch_summary) from remote_error
 
         mirror_log = local_dir / "mirror.log"
@@ -405,9 +451,9 @@ def launch_managed_run(args: argparse.Namespace) -> dict[str, Any]:
                 "mirror_log": str(mirror_log.resolve()),
                 "local_dir": str(local_dir.resolve()),
                 "launched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "launch_phase": "active",
             }
         )
+        set_launch_phase(launch_summary, "active")
         write_launch_summary(local_dir, launch_summary)
         return launch_summary
     except LaunchError as exc:

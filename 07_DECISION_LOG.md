@@ -198,3 +198,18 @@ Treat PR `#933` as the strongest live target to understand, but keep a conservat
 1. Sync `#933` artifacts immediately so the repo can inspect them exactly.
 2. Keep the operator/control plane narrow and reliable; do not respond to frontier motion by building a larger autonomous daemon.
 3. Choose reproduction order based on accepted-record probability, not just raw BPB.
+
+## 2026-03-28 — Launch reliability now gets hard timeouts and automatic recycle behavior
+
+**Decision:**
+Tighten the operator loop so launch phases are no longer allowed to hang indefinitely. Treat `pod running` as insufficient evidence; a launch must prove forward motion via successful phase completion or mirrored watchdog state within bounded time.
+
+**Rationale:**
+- The `#868` full repro hit the worst operational failure mode: 8x H100 pods were alive, but the job was stuck in launch (`copying_flash_attn_cache`) without producing experiment evidence.
+- We also hit two concrete infra failures on the same route: a non-git `/workspace/parameter-golf` directory causing remote bootstrap failure, and an SSH/SCP disconnect during FlashAttention cache transfer.
+- Those failures are execution problems, not research-thesis problems, so the system needs harsher launch-time controls rather than more idea generation.
+
+**Consequences:**
+1. Add explicit timeouts for SSH setup, spec copy, FlashAttention cache copy, and remote watchdog launch.
+2. Make remote bootstrap idempotent by deleting a non-git `/workspace/parameter-golf` before recloning.
+3. Raise the daily RunPod cap enough to permit one more serious 8x repro after failed launch tax, while keeping the single-run concurrency gate intact.

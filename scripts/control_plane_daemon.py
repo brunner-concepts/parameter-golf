@@ -409,6 +409,17 @@ def live_run_snapshot(live_root: Path, run_id: str) -> dict[str, Any]:
     }
 
 
+def supervisor_state_is_fresh(supervisor_state: dict[str, Any], timeout_s: int) -> bool:
+    status = supervisor_state.get("status")
+    if status not in {"launching", "watching"}:
+        return False
+    updated = parse_utc_timestamp(supervisor_state.get("updated_at"))
+    if updated is None:
+        return False
+    age = (datetime.now(timezone.utc) - updated).total_seconds()
+    return age <= timeout_s
+
+
 def any_active_live_run(live_root: Path) -> list[dict[str, Any]]:
     active_runs: list[dict[str, Any]] = []
     if not live_root.exists():
@@ -735,10 +746,15 @@ def evaluate_queue(
     full = live_run_snapshot(live_root, "repro_pr868_full")
     smoke_terminal = smoke.get("terminal_result", {}).get("status")
     full_terminal = full.get("terminal_result", {}).get("status")
-    smoke_supervisor = smoke.get("supervisor_state", {}).get("status")
-    full_supervisor = full.get("supervisor_state", {}).get("status")
+    stale_supervisor_timeout = int(policy.get("stale_supervisor_state_timeout_seconds", 180))
+    smoke_supervisor_state = smoke.get("supervisor_state", {})
+    full_supervisor_state = full.get("supervisor_state", {})
+    smoke_supervisor = smoke_supervisor_state.get("status")
+    full_supervisor = full_supervisor_state.get("status")
 
-    if smoke_supervisor in {"launching", "watching"} or full_supervisor in {"launching", "watching"}:
+    if supervisor_state_is_fresh(smoke_supervisor_state, stale_supervisor_timeout) or supervisor_state_is_fresh(
+        full_supervisor_state, stale_supervisor_timeout
+    ):
         queue_state["blocked"] = True
         queue_state["blocked_reason"] = "orphaned_supervisor_state_manual_review"
         return queue_state
@@ -833,6 +849,16 @@ def maybe_launch_next(
         "--max-infra-retries",
         "1",
     ]
+    launch_timeouts = policy.get("launch_timeouts_seconds", {})
+    for policy_key, cli_flag in (
+        ("ssh_setup", "--ssh-setup-timeout"),
+        ("spec_copy", "--spec-copy-timeout"),
+        ("flash_attn_cache_copy", "--flash-attn-cache-copy-timeout"),
+        ("remote_launch", "--remote-launch-timeout"),
+    ):
+        value = launch_timeouts.get(policy_key)
+        if value is not None:
+            command.extend([cli_flag, str(int(value))])
     next_compute_tier = queue_state.get("next_compute_tier")
     if next_compute_tier == "1xH100-smoke":
         smoke_gpu = policy.get("smoke_gpu_id")
