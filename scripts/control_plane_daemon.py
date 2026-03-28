@@ -100,6 +100,10 @@ def run_subprocess(cmd: list[str], cwd: Path | None = None) -> subprocess.Comple
     return subprocess.run(cmd, cwd=str(cwd) if cwd else None, capture_output=True, text=True, check=True)
 
 
+def stop_pod_quietly(pod_id: str) -> None:
+    subprocess.run(["runpodctl", "pod", "stop", pod_id], capture_output=True, text=True, check=False)
+
+
 def github_request(url: str) -> urllib.request.Request:
     return urllib.request.Request(
         url,
@@ -965,8 +969,10 @@ def build_operator_state(
         "supervisor_pid": supervisor_proc.pid if supervisor_proc and supervisor_proc.poll() is None else None,
         "active_target": queue_state.get("next_target_pr"),
         "active_run_id": queue_state.get("next_run_id"),
+        "active_supervisor": queue_state.get("active_supervisor"),
         "client_balance": budget_state.get("client_balance"),
         "active_pod_count": budget_state.get("active_pod_count"),
+        "active_pods": (budget_state.get("active_pods") or [])[:3],
         "top_ranked_target": frontier_snapshot.get("targets", [{}])[0].get("pr") if frontier_snapshot.get("targets") else None,
         "queue_blocked": queue_state.get("blocked"),
         "queue_blocked_reason": queue_state.get("blocked_reason"),
@@ -1018,6 +1024,111 @@ def maybe_record_supervisor_exit(
             ]
         )[:3500],
     )
+
+
+def recover_stale_launch_pods(
+    live_root: Path,
+    state_root: Path,
+    events_path: Path,
+    budget_state: dict[str, Any],
+    supervisor_proc: subprocess.Popen[str] | None,
+    stale_seconds: int = 180,
+    max_recoveries_per_run: int = 2,
+) -> None:
+    if supervisor_proc is not None and supervisor_proc.poll() is None:
+        return
+    if budget_state.get("active_pod_count", 0) <= 0 or not live_root.exists():
+        return
+
+    active_pods = {
+        str(pod.get("id"))
+        for pod in budget_state.get("active_pods", [])
+        if pod.get("id") and pod.get("desiredStatus") == "RUNNING"
+    }
+    if not active_pods:
+        return
+
+    recoveries_path = state_root / "stale_launch_recoveries.json"
+    recoveries = read_json_if_exists(recoveries_path)
+    now = datetime.now(timezone.utc)
+
+    for run_dir in sorted(live_root.iterdir()):
+        if not run_dir.is_dir():
+            continue
+        run_id = run_dir.name
+        launch = read_json_if_exists(run_dir / "launch.json")
+        pod_id = str(launch.get("pod_id") or "")
+        if not pod_id or pod_id not in active_pods:
+            continue
+        if int(recoveries.get(run_id, 0)) >= max_recoveries_per_run:
+            continue
+
+        current_state = read_json_if_exists(run_dir / "current_state.json")
+        terminal_result = read_json_if_exists(run_dir / "terminal_result.json")
+        supervisor_state_path = run_dir / "supervisor_state.json"
+        supervisor_state = read_json_if_exists(supervisor_state_path)
+
+        if current_state.get("status") in ACTIVE_RUN_STATUSES:
+            continue
+        if terminal_result.get("status") in TERMINAL_STATUSES:
+            continue
+
+        launch_phase = str(launch.get("launch_phase") or "")
+        if launch_phase == "active":
+            continue
+
+        phase_started = parse_utc_timestamp(launch.get("launch_phase_started_at"))
+        if phase_started is None or (now - phase_started).total_seconds() < stale_seconds:
+            continue
+
+        stop_pod_quietly(pod_id)
+        recovered_state = dict(supervisor_state)
+        recovered_state.update(
+            {
+                "updated_at": utc_now(),
+                "status": "infra_recycled_stale_launch",
+                "recovered_by": "control_plane_daemon",
+                "previous_status": supervisor_state.get("status"),
+                "recycled_pod_id": pod_id,
+                "launch_phase": launch_phase,
+            }
+        )
+        atomic_write_json(supervisor_state_path, recovered_state)
+        append_jsonl(
+            run_dir / "supervisor_events.jsonl",
+            {
+                "event": "stale_launch_pod_recycled",
+                "timestamp": utc_now(),
+                "run_id": run_id,
+                "pod_id": pod_id,
+                "launch_phase": launch_phase,
+                "phase_started_at": launch.get("launch_phase_started_at"),
+            },
+        )
+        recoveries[run_id] = int(recoveries.get(run_id, 0)) + 1
+        atomic_write_json(recoveries_path, recoveries)
+        append_jsonl(
+            events_path,
+            {
+                "event": "stale_launch_pod_recycled",
+                "timestamp": utc_now(),
+                "run_id": run_id,
+                "pod_id": pod_id,
+                "launch_phase": launch_phase,
+                "recovery_count": recoveries[run_id],
+            },
+        )
+        maybe_emit_notification(
+            "Parameter Golf stale launch recycled",
+            "\n".join(
+                [
+                    f"run={run_id}",
+                    f"pod={pod_id}",
+                    f"phase={launch_phase}",
+                    f"recovery_count={recoveries[run_id]}",
+                ]
+            ),
+        )
 
 
 def recover_orphaned_supervisor_states(
@@ -1155,6 +1266,15 @@ def main() -> int:
             budget_state = refresh_budget(policy, state_root, events_path)
             budget_due = now + float(policy["poll_intervals_seconds"]["budget"])
         if now >= queue_due:
+            recover_stale_launch_pods(
+                live_root,
+                state_root,
+                events_path,
+                budget_state,
+                supervisor_proc,
+                stale_seconds=int(policy.get("stale_launch_timeout_seconds", 180)),
+            )
+            budget_state = refresh_budget(policy, state_root, events_path)
             recover_orphaned_supervisor_states(live_root, state_root, events_path, budget_state, supervisor_proc)
             queue_state = evaluate_queue(policy, frontier_snapshot, budget_state, live_root, generated_specs, supervisor_proc)
             atomic_write_json(state_root / "queue.json", queue_state)
@@ -1170,6 +1290,9 @@ def main() -> int:
             )
             if not args.no_launch and supervisor_proc is None and queue_state.get("next_spec") and not queue_state.get("blocked"):
                 supervisor_proc = maybe_launch_next(queue_state, state_root, policy)
+                budget_state = refresh_budget(policy, state_root, events_path)
+                queue_state = evaluate_queue(policy, frontier_snapshot, budget_state, live_root, generated_specs, supervisor_proc)
+                atomic_write_json(state_root / "queue.json", queue_state)
             maybe_record_supervisor_exit(state_root, queue_state, supervisor_proc)
             if supervisor_proc is not None and supervisor_proc.poll() is not None:
                 supervisor_proc = None

@@ -213,3 +213,18 @@ Tighten the operator loop so launch phases are no longer allowed to hang indefin
 1. Add explicit timeouts for SSH setup, spec copy, FlashAttention cache copy, and remote watchdog launch.
 2. Make remote bootstrap idempotent by deleting a non-git `/workspace/parameter-golf` before recloning.
 3. Raise the daily RunPod cap enough to permit one more serious 8x repro after failed launch tax, while keeping the single-run concurrency gate intact.
+
+## 2026-03-28 — FlashAttention transport, not model logic, was the live bottleneck
+
+**Decision:**
+Cut the FlashAttention cache transport from a raw `1.5 GB` tarball to a compressed `.tar.zst` payload and add stale-launch pod recycling so the operator can kill orphaned 8x launches automatically.
+
+**Rationale:**
+- Inspection of the cached FlashAttention payload showed the bottleneck was a single unstripped `_C.abi3.so` with debug info; compressing the tarball reduced transport size to roughly `380 MB`.
+- The previous raw-tar path caused repeated 8x launch failures (`scp` timeout / disconnect) before any remote watchdog state or experiment evidence existed.
+- After a daemon restart, a live 8x pod could remain running even though no supervisor owned it anymore. That is unacceptable dead spend and must self-heal.
+
+**Consequences:**
+1. Default all future FlashAttention transfers to the compressed `.tar.zst` artifact and restore it directly in bootstrap.
+2. Recycle any active pod stuck in a launch phase without a live supervisor after a short stale timeout.
+3. Treat launch transport and supervisor ownership as first-class operator health signals, not just pod liveness.

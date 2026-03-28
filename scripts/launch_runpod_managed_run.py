@@ -11,7 +11,7 @@ from typing import Any
 
 
 DEFAULT_TEMPLATE_ID = "y5cejece4j"
-DEFAULT_FLASH_ATTN_CACHE = "11_RUN_CONTROL/cache/flash_attn_3_py312_6362bd3.tar"
+DEFAULT_FLASH_ATTN_CACHE = "11_RUN_CONTROL/cache/flash_attn_3_py312_6362bd3.tar.zst"
 COMPUTE_DEFAULTS = {
     "8xH100-SXM": {
         "gpu_id": "NVIDIA H100 80GB HBM3",

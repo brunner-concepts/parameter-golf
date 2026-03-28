@@ -65,7 +65,26 @@ fi
 if [[ -n "${FLASH_ATTN_CACHE_TARBALL}" && -f "${FLASH_ATTN_CACHE_TARBALL}" ]]; then
   echo "restoring flash_attn artifacts from ${FLASH_ATTN_CACHE_TARBALL}"
   mkdir -p "${SITE_PACKAGES}"
-  tar -xf "${FLASH_ATTN_CACHE_TARBALL}" -C "${SITE_PACKAGES}"
+  if [[ "${FLASH_ATTN_CACHE_TARBALL}" == *.tar.zst ]]; then
+    FLASH_ATTN_CACHE_TARBALL="${FLASH_ATTN_CACHE_TARBALL}" SITE_PACKAGES="${SITE_PACKAGES}" python - <<'PY'
+import os
+import tarfile
+from pathlib import Path
+
+import zstandard
+
+cache_path = Path(os.environ["FLASH_ATTN_CACHE_TARBALL"])
+target = Path(os.environ["SITE_PACKAGES"])
+
+with cache_path.open("rb") as handle:
+    dctx = zstandard.ZstdDecompressor()
+    with dctx.stream_reader(handle) as reader:
+        with tarfile.open(fileobj=reader, mode="r|") as tf:
+            tf.extractall(path=target)
+PY
+  else
+    tar -xf "${FLASH_ATTN_CACHE_TARBALL}" -C "${SITE_PACKAGES}"
+  fi
   if python - <<'PY'
 import flash_attn_interface  # noqa: F401
 import zstandard  # noqa: F401
