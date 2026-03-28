@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
+import subprocess
+import tempfile
 import time
 import urllib.parse
 import urllib.request
@@ -12,8 +13,8 @@ from pathlib import Path
 from typing import Any
 
 
-STEP_RE = re.compile(r"step:(\d+)/(\d+)")
-BPB_RE = re.compile(r"val_bpb:([0-9.]+)")
+ACTIVE_RUN_STATUSES = {"running", "starting", "dry-run"}
+TERMINAL_RUN_STATUSES = {"complete", "failed", "dry-run-complete"}
 
 
 def utc_now() -> str:
@@ -66,18 +67,10 @@ def get_updates(bot_token: str, offset: int | None) -> list[dict[str, Any]]:
     return response.get("result", [])
 
 
-def latest_step(text: str) -> tuple[int | None, int | None]:
-    latest: tuple[int | None, int | None] = (None, None)
-    for match in STEP_RE.finditer(text):
-        latest = (int(match.group(1)), int(match.group(2)))
-    return latest
-
-
-def latest_bpb(text: str) -> str | None:
-    latest: str | None = None
-    for match in BPB_RE.finditer(text):
-        latest = match.group(1)
-    return latest
+def all_run_dirs(live_root: Path) -> list[Path]:
+    if not live_root.exists():
+        return []
+    return sorted([child for child in live_root.iterdir() if child.is_dir()])
 
 
 def run_snapshot(run_dir: Path) -> dict[str, Any]:
@@ -85,61 +78,43 @@ def run_snapshot(run_dir: Path) -> dict[str, Any]:
     terminal = read_json(run_dir / "terminal_result.json")
     launch = read_json(run_dir / "launch.json")
     summary = read_text(run_dir / "summary.md")
-    tail = read_text(run_dir / "active_log.tail.txt")
-    merged_text = tail or summary
-    step, total = latest_step(merged_text)
     return {
         "run_id": run_dir.name,
-        "phase_id": current.get("phase_id"),
         "run_status": current.get("status"),
         "terminal_status": terminal.get("status"),
-        "terminal_message": terminal.get("message"),
-        "pod_id": launch.get("pod_id"),
-        "gpu_id": launch.get("gpu_id"),
-        "step": step,
-        "step_total": total,
-        "val_bpb": latest_bpb(merged_text),
+        "phase_id": current.get("phase_id"),
         "updated_at": current.get("updated_at") or terminal.get("updated_at") or launch.get("launched_at"),
+        "pod_id": launch.get("pod_id"),
         "summary": summary,
     }
 
 
-def all_run_snapshots(live_root: Path) -> list[dict[str, Any]]:
-    snapshots: list[dict[str, Any]] = []
-    if not live_root.exists():
-        return snapshots
-    for run_dir in sorted(live_root.iterdir()):
-        if run_dir.is_dir():
-            snapshots.append(run_snapshot(run_dir))
-    return snapshots
-
-
 def active_snapshot(live_root: Path) -> dict[str, Any] | None:
-    snapshots = all_run_snapshots(live_root)
-    active = [s for s in snapshots if s.get("run_status") in {"running", "starting", "dry-run"}]
+    snapshots = [run_snapshot(run_dir) for run_dir in all_run_dirs(live_root)]
+    active = [snap for snap in snapshots if snap.get("run_status") in ACTIVE_RUN_STATUSES]
     if active:
-        active.sort(key=lambda s: s.get("updated_at") or "", reverse=True)
+        active.sort(key=lambda item: item.get("updated_at") or "", reverse=True)
         return active[0]
-    completed = [s for s in snapshots if s.get("terminal_status") in {"complete", "failed", "dry-run-complete"}]
-    if completed:
-        completed.sort(key=lambda s: s.get("updated_at") or "", reverse=True)
-        return completed[0]
+    terminal = [snap for snap in snapshots if snap.get("terminal_status") in TERMINAL_RUN_STATUSES]
+    if terminal:
+        terminal.sort(key=lambda item: item.get("updated_at") or "", reverse=True)
+        return terminal[0]
     return snapshots[-1] if snapshots else None
 
 
 def short_pod_id(pod_id: str | None) -> str:
-    if not pod_id:
-        return "n/a"
-    return pod_id[:8]
+    return pod_id[:8] if pod_id else "n/a"
 
 
-def status_message(snapshot: dict[str, Any] | None) -> str:
-    if not snapshot:
-        return "Parameter Golf\nNo active run."
-    lines = [
-        "Parameter Golf Status",
-        f"Run: {snapshot['run_id']}",
-    ]
+def trim(text: str, max_chars: int) -> str:
+    text = text.strip()
+    if len(text) <= max_chars:
+        return text
+    return text[-max_chars:]
+
+
+def proactive_message(snapshot: dict[str, Any]) -> str:
+    lines = ["Parameter Golf Update", f"Run: {snapshot['run_id']}"]
     if snapshot.get("pod_id"):
         lines.append(f"Pod: {short_pod_id(snapshot['pod_id'])}")
     if snapshot.get("phase_id"):
@@ -148,125 +123,143 @@ def status_message(snapshot: dict[str, Any] | None) -> str:
         lines.append(f"Status: {snapshot['run_status']}")
     if snapshot.get("terminal_status") and snapshot.get("terminal_status") != "idle":
         lines.append(f"Terminal: {snapshot['terminal_status']}")
-    if snapshot.get("step") is not None and snapshot.get("step_total") is not None:
-        lines.append(f"Progress: {snapshot['step']}/{snapshot['step_total']}")
-    if snapshot.get("val_bpb"):
-        lines.append(f"Latest BPB: {snapshot['val_bpb']}")
     if snapshot.get("updated_at"):
         lines.append(f"Updated: {snapshot['updated_at']}")
+    summary = trim(snapshot.get("summary") or "", 1200)
+    if summary:
+        lines.extend(["", summary])
     return "\n".join(lines)
 
 
-def strategy_message(root: Path, live_root: Path) -> str:
-    queue = read_json(root / "11_RUN_CONTROL/control_plane/state/queue.json")
+def state_key(snapshot: dict[str, Any]) -> str:
+    return json.dumps(
+        {
+            "run_status": snapshot.get("run_status"),
+            "terminal_status": snapshot.get("terminal_status"),
+            "phase_id": snapshot.get("phase_id"),
+            "updated_at": snapshot.get("updated_at"),
+        },
+        sort_keys=True,
+    )
+
+
+def build_live_context(root: Path, live_root: Path) -> str:
+    operator_state = read_json(root / "11_RUN_CONTROL/control_plane/state/operator_state.json")
+    budget_state = read_json(root / "11_RUN_CONTROL/control_plane/state/budget_state.json")
+    queue_state = read_json(root / "11_RUN_CONTROL/control_plane/state/queue.json")
     snapshot = active_snapshot(live_root)
-    top = (queue.get("candidates") or [{}])[0]
-    lines = ["Parameter Golf Strategy"]
-    if top.get("pr"):
-        lines.append(f"Primary target: PR #{top['pr']} ({top.get('label', 'unknown')})")
-        lines.append(f"Why: {top.get('notes', 'highest ranked target in current policy')}")
-    if snapshot:
-        lines.append(f"Current run: {snapshot['run_id']} on {snapshot.get('phase_id') or 'unknown'}")
-    if queue.get("blocked"):
-        lines.append(f"Queue: blocked by {queue.get('blocked_reason')}")
-    else:
-        lines.append("Queue: healthy")
-    lines.append("Next gate: if PR #868 smoke completes cleanly, promote to full 8x repro.")
-    lines.append("Deferred: PR #933 remains manual-only due legality scrutiny.")
-    return "\n".join(lines)
+
+    context = {
+        "operator_state": {
+            "queue_blocked": operator_state.get("queue_blocked"),
+            "queue_blocked_reason": operator_state.get("queue_blocked_reason"),
+            "active_pod_count": operator_state.get("active_pod_count"),
+            "top_ranked_target": operator_state.get("top_ranked_target"),
+            "updated_at": operator_state.get("updated_at"),
+        },
+        "budget_state": {
+            "client_balance": budget_state.get("client_balance"),
+            "current_spend_per_hr": budget_state.get("current_spend_per_hr"),
+            "reserved_today_usd": budget_state.get("reserved_today_usd"),
+            "daily_cap_usd": budget_state.get("daily_cap_usd"),
+            "active_pod_count": budget_state.get("active_pod_count"),
+            "updated_at": budget_state.get("updated_at"),
+        },
+        "queue_state": {
+            "blocked": queue_state.get("blocked"),
+            "blocked_reason": queue_state.get("blocked_reason"),
+            "next_run_id": queue_state.get("next_run_id"),
+            "next_target_pr": queue_state.get("next_target_pr"),
+            "candidates": (queue_state.get("candidates") or [])[:3],
+            "updated_at": queue_state.get("updated_at"),
+        },
+        "active_or_latest_run": {
+            "run_id": snapshot.get("run_id") if snapshot else None,
+            "run_status": snapshot.get("run_status") if snapshot else None,
+            "terminal_status": snapshot.get("terminal_status") if snapshot else None,
+            "phase_id": snapshot.get("phase_id") if snapshot else None,
+            "pod_id": snapshot.get("pod_id") if snapshot else None,
+            "updated_at": snapshot.get("updated_at") if snapshot else None,
+            "summary_tail": trim(snapshot.get("summary") or "", 2500) if snapshot else "",
+        },
+    }
+    return json.dumps(context, indent=2, sort_keys=True)
 
 
-def next_message(root: Path, live_root: Path) -> str:
-    snapshot = active_snapshot(live_root)
-    if snapshot and snapshot.get("run_status") in {"running", "starting", "dry-run"}:
-        return "\n".join(
-            [
-                "Parameter Golf Next",
-                f"Current run is active: {snapshot['run_id']}",
-                f"Phase: {snapshot.get('phase_id') or 'unknown'}",
-                "Immediate next action: let the run finish and evaluate the terminal result.",
-            ]
-        )
-    queue = read_json(root / "11_RUN_CONTROL/control_plane/state/queue.json")
-    if queue.get("next_run_id"):
-        return "\n".join(
-            [
-                "Parameter Golf Next",
-                f"Next queued run: {queue['next_run_id']}",
-                f"Spec: {queue.get('next_spec')}",
-            ]
-        )
-    return "Parameter Golf Next\nNo queued run right now."
+def build_prompt(root: Path, live_root: Path, transcript: list[dict[str, str]], user_text: str) -> str:
+    recent = transcript[-8:]
+    transcript_lines: list[str] = []
+    for item in recent:
+        role = item.get("role", "user")
+        text = item.get("text", "")
+        transcript_lines.append(f"{role.upper()}: {text}")
+    transcript_block = "\n".join(transcript_lines) if transcript_lines else "(none)"
+    live_context = build_live_context(root, live_root)
+    return "\n".join(
+        [
+            "You are Parameter Golf Bot, a conversational gateway for a live autonomous research operator.",
+            "Be natural, concise, and useful. Do not sound like a command parser.",
+            "Use the live control-plane state below as truth.",
+            "You are not the executor. Do not claim you performed actions unless the live state proves it.",
+            "If the user asks for strategy or judgment, answer like a pragmatic operator/CEO.",
+            "If the user asks to take an action, you may describe the recommended action, but do not claim it already happened.",
+            "If the user asks how things are going, synthesize the current run state and next decision point.",
+            "",
+            "LIVE STATE",
+            live_context,
+            "",
+            "RECENT CHAT",
+            transcript_block,
+            "",
+            f"NEW USER MESSAGE\nUSER: {user_text}",
+            "",
+            "Reply as the assistant only.",
+        ]
+    )
 
 
-def budget_message(root: Path) -> str:
-    budget = read_json(root / "11_RUN_CONTROL/control_plane/state/budget_state.json")
-    if not budget:
-        return "Parameter Golf Budget\nNo budget snapshot available."
-    lines = [
-        "Parameter Golf Budget",
-        f"Balance: ${budget.get('client_balance', 0):.2f}",
-        f"Spend/hr: ${budget.get('current_spend_per_hr', 0):.2f}",
-        f"Active pods: {budget.get('active_pod_count', 0)}",
-        f"Reserved today: ${budget.get('reserved_today_usd', 0):.2f}",
-        f"Daily cap: ${budget.get('daily_cap_usd', 0):.2f}",
-    ]
-    return "\n".join(lines)
+def run_codex_reply(root: Path, prompt: str) -> str:
+    with tempfile.NamedTemporaryFile(prefix="pgolf-telegram-reply-", suffix=".txt", delete=False) as output_file:
+        output_path = Path(output_file.name)
+    try:
+        cmd = [
+            "codex",
+            "exec",
+            "-C",
+            str(root),
+            "--skip-git-repo-check",
+            "-s",
+            "read-only",
+            "-m",
+            "gpt-5.4",
+            "-o",
+            str(output_path),
+            prompt,
+        ]
+        subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=180)
+        reply = output_path.read_text(encoding="utf-8").strip()
+        return reply or "I do not have a useful reply yet."
+    finally:
+        output_path.unlink(missing_ok=True)
 
 
 def help_message() -> str:
     return "\n".join(
         [
             "Parameter Golf Bot",
-            "Commands:",
-            "status - current run and progress",
-            "strategy - current target and why",
-            "next - next action/gate",
-            "budget - RunPod balance and cap",
-            "help - this message",
+            "You can ask naturally now.",
+            "",
+            "Examples:",
+            "- how's it going?",
+            "- what is the strategy?",
+            "- what should we do next?",
+            "- how is the budget looking?",
         ]
     )
 
 
-def classify_query(text: str) -> str:
-    normalized = text.strip().lower()
-    if normalized in {"/start", "/help", "help"}:
-        return "help"
-    if normalized in {"hi", "hello", "hey", "yo", "sup"}:
-        return "greeting"
-    if normalized in {"/status", "status"} or ("how" in normalized and "going" in normalized):
-        return "status"
-    if "how are" in normalized or "things good" in normalized or "good?" in normalized:
-        return "status"
-    if normalized in {"/strategy", "strategy", "plan"} or "strategy" in normalized:
-        return "strategy"
-    if normalized in {"/next", "next"}:
-        return "next"
-    if normalized in {"/budget", "budget"}:
-        return "budget"
-    return "unknown"
-
-
-def state_key(snapshot: dict[str, Any]) -> str:
-    return json.dumps(
-        {
-            "phase_id": snapshot.get("phase_id"),
-            "run_status": snapshot.get("run_status"),
-            "terminal_status": snapshot.get("terminal_status"),
-            "val_bpb": snapshot.get("val_bpb"),
-        },
-        sort_keys=True,
-    )
-
-
-def proactive_message(snapshot: dict[str, Any], reason: str) -> str:
-    lines = [f"Parameter Golf {reason}"]
-    lines.extend(status_message(snapshot).splitlines()[1:])
-    return "\n".join(lines)
-
-
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Telegram gateway sidecar for Parameter Golf.")
+    parser = argparse.ArgumentParser(description="Telegram conversational gateway for Parameter Golf.")
     parser.add_argument("--bot-token", required=True)
     parser.add_argument("--chat-id", required=True)
     parser.add_argument("--live-root", default="11_RUN_CONTROL/live")
@@ -282,85 +275,55 @@ def main() -> int:
     state_file = (root / args.state_file).resolve()
     state = read_json(state_file)
     sent = state.get("sent", {})
-    milestones = state.get("milestones", {})
     offset = state.get("offset")
+    chats = state.get("chats", {})
     initialized = bool(state)
 
     while True:
-        snapshots = {snap["run_id"]: snap for snap in all_run_snapshots(live_root)}
-
+        snapshots = {snap["run_id"]: snap for snap in [run_snapshot(run_dir) for run_dir in all_run_dirs(live_root)]}
         if not initialized:
             for run_id, snapshot in snapshots.items():
                 sent[run_id] = state_key(snapshot)
-                step = snapshot.get("step")
-                if step is not None:
-                    if step >= 200:
-                        milestones[run_id] = 200
-                    elif step >= 150:
-                        milestones[run_id] = 150
-                    elif step >= 100:
-                        milestones[run_id] = 100
-                    elif step >= 50:
-                        milestones[run_id] = 50
             initialized = True
 
         for run_id, snapshot in snapshots.items():
             current_key = state_key(snapshot)
-            previous_key = sent.get(run_id)
-            if previous_key != current_key and (snapshot.get("phase_id") or snapshot.get("terminal_status")):
-                send_telegram(args.bot_token, args.chat_id, proactive_message(snapshot, "update"))
+            if sent.get(run_id) != current_key and (snapshot.get("phase_id") or snapshot.get("terminal_status")):
+                send_telegram(args.bot_token, args.chat_id, proactive_message(snapshot))
                 sent[run_id] = current_key
-
-            step = snapshot.get("step")
-            if step is not None:
-                prior = int(milestones.get(run_id, 0))
-                crossed = [threshold for threshold in (50, 100, 150, 200) if step >= threshold > prior]
-                if crossed:
-                    threshold = max(crossed)
-                    send_telegram(args.bot_token, args.chat_id, proactive_message(snapshot, f"milestone {threshold}"))
-                    milestones[run_id] = threshold
 
         for update in get_updates(args.bot_token, offset):
             offset = int(update["update_id"]) + 1
             message = update.get("message") or {}
             chat = message.get("chat") or {}
-            if str(chat.get("id")) != str(args.chat_id):
+            chat_id = str(chat.get("id"))
+            if chat_id != str(args.chat_id):
                 continue
-            text = (message.get("text") or "").strip()
-            query = classify_query(text)
-            if query == "help":
+            user_text = (message.get("text") or "").strip()
+            if not user_text:
+                continue
+
+            transcript = chats.get(chat_id, [])
+            if user_text.lower() in {"/start", "/help", "help"}:
                 reply = help_message()
-            elif query == "greeting":
-                snapshot = active_snapshot(live_root)
-                reply = "\n".join(
-                    [
-                        "Parameter Golf Bot",
-                        "Current snapshot:",
-                        status_message(snapshot),
-                        "",
-                        "You can also ask: strategy, next, budget, help",
-                    ]
-                )
-            elif query == "status":
-                reply = status_message(active_snapshot(live_root))
-            elif query == "strategy":
-                reply = strategy_message(root, live_root)
-            elif query == "next":
-                reply = next_message(root, live_root)
-            elif query == "budget":
-                reply = budget_message(root)
             else:
-                snapshot = active_snapshot(live_root)
-                reply = "\n".join(
-                    [
-                        "Parameter Golf Bot",
-                        "I did not map that message exactly.",
-                        "",
-                        status_message(snapshot),
-                        "",
-                        "Try: status, strategy, next, budget, help",
-                    ]
-                )
+                transcript.append({"role": "user", "text": user_text, "timestamp": utc_now()})
+                prompt = build_prompt(root, live_root, transcript, user_text)
+                try:
+                    reply = run_codex_reply(root, prompt)
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+                    reply = "\n".join(
+                        [
+                            "Parameter Golf Bot",
+                            "The conversational backend failed on this turn.",
+                            f"Reason: {type(exc).__name__}",
+                            "",
+                            "Try again in a moment.",
+                        ]
+                    )
+                transcript.append({"role": "assistant", "text": reply, "timestamp": utc_now()})
+                chats[chat_id] = transcript[-12:]
+
             send_telegram(args.bot_token, args.chat_id, reply)
 
         atomic_write_json(
@@ -369,7 +332,7 @@ def main() -> int:
                 "updated_at": utc_now(),
                 "offset": offset,
                 "sent": sent,
-                "milestones": milestones,
+                "chats": chats,
             },
         )
         time.sleep(args.poll_interval)
