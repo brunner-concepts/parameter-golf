@@ -1113,6 +1113,7 @@ def executive_diagnosis(
     overrides: dict[str, Any],
 ) -> tuple[str, str, str]:
     top_target = frontier_snapshot.get("targets", [{}])[0]
+    active_target_pr = queue_state.get("next_target_pr") or top_target.get("pr")
     run_id = queue_state.get("next_run_id")
     if overrides.get("paused"):
         return (
@@ -1142,7 +1143,7 @@ def executive_diagnosis(
     if queue_state.get("next_run_id"):
         return (
             "active_target_ready",
-            f"Continue on PR #{queue_state.get('next_target_pr')}, which remains the top-ranked approved target with the best acceptance-safety profile.",
+            f"Continue on PR #{active_target_pr}, which remains the top-ranked approved target with the best acceptance-safety profile.",
             f"Launch or continue {queue_state.get('next_run_id')} and only pivot targets if legality or execution evidence materially changes.",
         )
     return (
