@@ -63,7 +63,7 @@
       "notes": "Important lineage target and cleaner code surface for phrase-cache blending."
     }
   },
-  "smoke_gpu_id": "NVIDIA H100 PCIe",
+  "smoke_gpu_id": "NVIDIA H100 80GB HBM3",
   "reserve_hours_by_tier": {
     "1xH100-smoke": 1.0,
     "8xH100-SXM": 1.0
