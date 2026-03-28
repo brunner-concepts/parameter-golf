@@ -98,6 +98,29 @@ def tail_jsonl(path: Path, limit: int = 5) -> list[dict[str, Any]]:
     return rows[-limit:]
 
 
+def parse_structured_report(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    payload: dict[str, Any] = {"report_path": str(path.relative_to(repo_root()))}
+    notes: list[str] = []
+    in_notes = False
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.rstrip()
+        if in_notes:
+            notes.append(line)
+            continue
+        if line.startswith("notes: |"):
+            in_notes = True
+            continue
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        payload[key.strip()] = value.strip()
+    if notes:
+        payload["notes"] = "\n".join(notes).strip()
+    return payload
+
+
 def run_json(cmd: list[str]) -> Any:
     proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
     return json.loads(proc.stdout)
@@ -1300,6 +1323,111 @@ def build_operator_state(
     }
 
 
+def build_status_snapshot(
+    policy: dict[str, Any],
+    state_root: Path,
+    executive_state: dict[str, Any],
+    operator_state: dict[str, Any],
+    budget_state: dict[str, Any],
+    queue_state: dict[str, Any],
+    frontier_snapshot: dict[str, Any],
+) -> dict[str, Any]:
+    root = repo_root()
+    full_report = parse_structured_report(root / "09_RESULTS/repro_pr868_full.md")
+    mismatch_audit = parse_structured_report(root / "09_RESULTS/repro_pr868_mismatch_audit.md")
+    funding_ledger = read_json_if_exists(root / "11_RUN_CONTROL/funding_ledger.json")
+    diagnosis_key = executive_state.get("diagnosis_key")
+    next_milestone = {
+        "id": "pr868_parity_rerun_readiness",
+        "title": "PR #868 parity rerun readiness",
+        "status": "blocked" if diagnosis_key == "pr868_eval_surface_review" else "in_progress",
+        "blocking_reason": (
+            "Need a pinned challenge manifest and validation-shard surface before another #868 confirmation run."
+            if diagnosis_key == "pr868_eval_surface_review"
+            else "Need the current control-plane diagnosis to settle into a submission decision."
+        ),
+        "completion_gate": "Capture exact challenge manifest and shard inventory, then prepare a pinned-manifest #868 rerun path.",
+    }
+    grant_status = {
+        "recommended_tier": "development_grant",
+        "recommended_timing": "after_next_milestone",
+        "ready_to_submit_now": False,
+        "blocking_reason": next_milestone["blocking_reason"],
+        "narrative_position": (
+            "Strong operational progress and a full 8x repro exist, but the #868 result is still under audit and should be presented as unresolved."
+        ),
+    }
+    competition_pr_status = {
+        "ready": False,
+        "blocking_reason": "PR #868 still has an unresolved eval-surface mismatch and should not be packaged as a competition PR yet.",
+    }
+    self_funded_total = funding_ledger.get("self_funded_reload_total_usd")
+    sponsored_total = funding_ledger.get("sponsored_credit_total_usd")
+    summary_lines = [
+        "PR #868 full repro completed on 8x H100 SXM and the leading diagnosis is eval-surface drift, not base-model mismatch.",
+        f"Current operator state is paused on review with no active pods; balance is ${float(budget_state.get('client_balance', 0.0)):.2f} and spend today is ${float(budget_state.get('spent_today_usd', 0.0)):.2f}.",
+    ]
+    if isinstance(self_funded_total, (int, float)) or isinstance(sponsored_total, (int, float)):
+        funded_parts = []
+        if isinstance(self_funded_total, (int, float)):
+            funded_parts.append(f"${float(self_funded_total):.0f} self-funded reloads")
+        if isinstance(sponsored_total, (int, float)):
+            funded_parts.append(f"${float(sponsored_total):.0f} sponsored credit")
+        summary_lines.append("Funding evidence captured: " + ", ".join(funded_parts) + ".")
+    summary_lines.append("Next milestone is a pinned-manifest #868 rerun path; competition PR submission remains blocked until that parity issue is resolved.")
+    return {
+        "updated_at": utc_now(),
+        "source_of_truth": {
+            "working_memory_path": "11_RUN_CONTROL/control_plane/state/working_memory.md",
+            "executive_state_path": "11_RUN_CONTROL/control_plane/state/executive_state.json",
+            "budget_state_path": "11_RUN_CONTROL/control_plane/state/budget_state.json",
+            "full_repro_report_path": "09_RESULTS/repro_pr868_full.md",
+            "mismatch_audit_path": "09_RESULTS/repro_pr868_mismatch_audit.md",
+            "funding_ledger_path": "11_RUN_CONTROL/funding_ledger.json",
+        },
+        "summary": " ".join(summary_lines),
+        "diagnosis": {
+            "key": executive_state.get("diagnosis_key"),
+            "text": executive_state.get("diagnosis"),
+            "next_autonomous_action": executive_state.get("next_autonomous_action"),
+        },
+        "current_focus": {
+            "target_pr": executive_state.get("active_target_pr"),
+            "queue_blocked": executive_state.get("queue_blocked"),
+            "queue_blocked_reason": executive_state.get("queue_blocked_reason"),
+            "active_run_id": executive_state.get("active_run_id"),
+            "top_ranked_target": operator_state.get("top_ranked_target"),
+        },
+        "budget": {
+            "client_balance": budget_state.get("client_balance"),
+            "spent_today_usd": budget_state.get("spent_today_usd"),
+            "daily_cap_usd": budget_state.get("daily_cap_usd"),
+            "current_spend_per_hr": budget_state.get("current_spend_per_hr"),
+            "reserve_floor_usd": budget_state.get("minimum_runpod_balance_reserve_usd"),
+            "active_pod_count": budget_state.get("active_pod_count"),
+            "billing_window_start": budget_state.get("billing_window_start"),
+            "billing_window_end": budget_state.get("billing_window_end"),
+        },
+        "funding": funding_ledger,
+        "latest_results": {
+            "full_repro": full_report,
+            "mismatch_audit": mismatch_audit,
+        },
+        "next_milestone": next_milestone,
+        "grant_application": grant_status,
+        "competition_pr": competition_pr_status,
+        "frontier": {
+            "official_sota_bpb": float((policy.get("frontier") or {}).get("official_sota_bpb", 0.0)),
+            "tracked_prs": [target.get("pr") for target in (frontier_snapshot.get("targets") or [])[:3]],
+        },
+        "paths": {
+            "queue_path": str(state_root / "queue.json"),
+            "operator_state_path": str(state_root / "operator_state.json"),
+            "status_snapshot_path": str(state_root / "status_snapshot.json"),
+        },
+    }
+
+
 def maybe_record_supervisor_exit(
     state_root: Path,
     queue_state: dict[str, Any],
@@ -1728,6 +1856,18 @@ def main() -> int:
                 supervisor_proc,
             )
             atomic_write_json(state_root / "operator_state.json", operator_state)
+            atomic_write_json(
+                state_root / "status_snapshot.json",
+                build_status_snapshot(
+                    policy,
+                    state_root,
+                    executive_state,
+                    operator_state,
+                    budget_state,
+                    queue_state,
+                    frontier_snapshot,
+                ),
+            )
             queue_due = now + float(policy["poll_intervals_seconds"]["queue"])
         if args.once:
             break

@@ -154,3 +154,25 @@ Useful commands:
 - `cap <usd>`
 
 Freeform chat still routes through Codex, but these commands mutate or report real local operator state directly.
+
+## Status snapshot
+
+The control plane now writes a compact machine-readable summary to:
+
+- `11_RUN_CONTROL/control_plane/state/status_snapshot.json`
+
+It is the best single-file summary for:
+
+- current diagnosis
+- next autonomous action
+- budget and current balance
+- latest `#868` repro and mismatch-audit state
+- grant/application readiness
+- competition PR readiness
+- next milestone and blocker
+
+Tracked funding context lives in:
+
+- `11_RUN_CONTROL/funding_ledger.json`
+
+That file is intentionally separate from the ignored runtime state so the self-funded RunPod spend and sponsored credits can be cited in external write-ups without scraping the billing UI again.

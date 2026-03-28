@@ -182,6 +182,8 @@ def build_live_context(root: Path, live_root: Path) -> str:
     operator_state = read_json(root / "11_RUN_CONTROL/control_plane/state/operator_state.json")
     executive_state = read_json(root / "11_RUN_CONTROL/control_plane/state/executive_state.json")
     budget_state = read_json(root / "11_RUN_CONTROL/control_plane/state/budget_state.json")
+    status_snapshot = read_json(root / "11_RUN_CONTROL/control_plane/state/status_snapshot.json")
+    funding_ledger = read_json(root / "11_RUN_CONTROL/funding_ledger.json")
     queue_state = read_json(root / "11_RUN_CONTROL/control_plane/state/queue.json")
     provider_storage_state = read_json(root / "11_RUN_CONTROL/control_plane/state/provider_storage_state.json")
     decisions_path = root / "11_RUN_CONTROL/control_plane/state/decisions.jsonl"
@@ -190,6 +192,8 @@ def build_live_context(root: Path, live_root: Path) -> str:
 
     context = {
         "executive_state": executive_state,
+        "status_snapshot": status_snapshot,
+        "funding_ledger": funding_ledger,
         "provider_storage_state": provider_storage_state,
         "operator_state": {
             "queue_blocked": operator_state.get("queue_blocked"),
@@ -201,7 +205,7 @@ def build_live_context(root: Path, live_root: Path) -> str:
         "budget_state": {
             "client_balance": budget_state.get("client_balance"),
             "current_spend_per_hr": budget_state.get("current_spend_per_hr"),
-            "reserved_today_usd": budget_state.get("reserved_today_usd"),
+            "spent_today_usd": budget_state.get("spent_today_usd"),
             "daily_cap_usd": budget_state.get("daily_cap_usd"),
             "active_pod_count": budget_state.get("active_pod_count"),
             "active_pods": (budget_state.get("active_pods") or [])[:3],
@@ -423,6 +427,8 @@ def deterministic_reply(root: Path, live_root: Path, user_text: str) -> str | No
     text = user_text.strip().lower()
     executive_state = read_json(root / "11_RUN_CONTROL/control_plane/state/executive_state.json")
     budget_state = read_json(root / "11_RUN_CONTROL/control_plane/state/budget_state.json")
+    status_snapshot = read_json(root / "11_RUN_CONTROL/control_plane/state/status_snapshot.json")
+    funding_ledger = read_json(root / "11_RUN_CONTROL/funding_ledger.json")
     snapshot = active_snapshot(live_root) or {}
     override_path = overrides_path(root)
     overrides = read_overrides(override_path)
@@ -447,18 +453,31 @@ def deterministic_reply(root: Path, live_root: Path, user_text: str) -> str | No
         write_overrides(override_path, overrides)
         return f"Daily RunPod cap set to ${cap_value:.2f}. The control plane will use that on the next budget refresh."
     if text in {"budget", "/budget"}:
-        return "\n".join(
-            [
-                "Parameter Golf Budget",
-                f"balance=${float(budget_state.get('client_balance', 0.0)):.2f}",
-                f"spent_today=${float(budget_state.get('spent_today_usd', 0.0)):.2f}",
-                f"daily_cap=${float(budget_state.get('daily_cap_usd', 0.0)):.2f}",
-                f"current_spend_per_hr=${float(budget_state.get('current_spend_per_hr', 0.0)):.3f}",
-            ]
-        )
+        lines = [
+            "Parameter Golf Budget",
+            f"balance=${float(budget_state.get('client_balance', 0.0)):.2f}",
+            f"spent_today=${float(budget_state.get('spent_today_usd', 0.0)):.2f}",
+            f"daily_cap=${float(budget_state.get('daily_cap_usd', 0.0)):.2f}",
+            f"current_spend_per_hr=${float(budget_state.get('current_spend_per_hr', 0.0)):.3f}",
+        ]
+        self_funded = funding_ledger.get("self_funded_reload_total_usd")
+        sponsored = funding_ledger.get("sponsored_credit_total_usd")
+        if isinstance(self_funded, (int, float)):
+            lines.append(f"self_funded_reloads=${float(self_funded):.0f}")
+        if isinstance(sponsored, (int, float)):
+            lines.append(f"sponsored_credits=${float(sponsored):.0f}")
+        return "\n".join(lines)
     if text in {"why", "/why", "decision", "/decision"}:
-        diagnosis = executive_state.get("diagnosis") or "No executive diagnosis recorded yet."
-        next_action = executive_state.get("next_autonomous_action") or "No next action recorded yet."
+        diagnosis = (
+            status_snapshot.get("diagnosis", {}).get("text")
+            or executive_state.get("diagnosis")
+            or "No executive diagnosis recorded yet."
+        )
+        next_action = (
+            status_snapshot.get("diagnosis", {}).get("next_autonomous_action")
+            or executive_state.get("next_autonomous_action")
+            or "No next action recorded yet."
+        )
         return "\n".join(
             [
                 "Parameter Golf Executive View",
@@ -472,13 +491,53 @@ def deterministic_reply(root: Path, live_root: Path, user_text: str) -> str | No
             ]
         )
     if text in {"next", "/next"}:
-        return executive_state.get("next_autonomous_action") or "No next action recorded yet."
+        return (
+            status_snapshot.get("diagnosis", {}).get("next_autonomous_action")
+            or executive_state.get("next_autonomous_action")
+            or "No next action recorded yet."
+        )
     if text in {"status", "/status"}:
-        return proactive_message(snapshot) if snapshot else "No live run snapshot is available right now."
+        active_pod_count = int((status_snapshot.get("budget") or {}).get("active_pod_count") or 0)
+        run_is_active = str(snapshot.get("run_status")) in ACTIVE_RUN_STATUSES if snapshot else False
+        if snapshot and (run_is_active or active_pod_count > 0):
+            return proactive_message(snapshot)
+        summary = status_snapshot.get("summary")
+        milestone = status_snapshot.get("next_milestone", {})
+        if summary:
+            lines = ["Parameter Golf Status", summary]
+            if milestone:
+                lines.extend(
+                    [
+                        "",
+                        "Next milestone:",
+                        f"{milestone.get('title')} [{milestone.get('status')}]",
+                        milestone.get("blocking_reason") or "",
+                    ]
+                )
+            return "\n".join(line for line in lines if line is not None)
+        return "No live run snapshot is available right now."
     if text in {"strategy", "/strategy"}:
-        diagnosis = executive_state.get("diagnosis") or "No executive diagnosis recorded yet."
-        next_action = executive_state.get("next_autonomous_action") or "No next action recorded yet."
-        return "\n".join([diagnosis, "", "Next action:", next_action])
+        diagnosis = (
+            status_snapshot.get("diagnosis", {}).get("text")
+            or executive_state.get("diagnosis")
+            or "No executive diagnosis recorded yet."
+        )
+        next_action = (
+            status_snapshot.get("diagnosis", {}).get("next_autonomous_action")
+            or executive_state.get("next_autonomous_action")
+            or "No next action recorded yet."
+        )
+        grant_status = status_snapshot.get("grant_application", {})
+        lines = [diagnosis, "", "Next action:", next_action]
+        if grant_status:
+            lines.extend(
+                [
+                    "",
+                    "Grant timing:",
+                    f"{grant_status.get('recommended_timing')} ({grant_status.get('blocking_reason')})",
+                ]
+            )
+        return "\n".join(lines)
     return None
 
 

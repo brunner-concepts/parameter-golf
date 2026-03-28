@@ -55,3 +55,17 @@ It does **not**:
 - open PRs
 - let advisory sidecars spend compute
 - expose the dashboard on a non-localhost interface
+
+## Codex Automation
+
+The Codex app can be used as a scheduled read-only observer over this repo, but it should not replace the repo control plane.
+
+Use the prompt in `ops/local-operator/codex_automation_prompt.md` to create a daily Automation against this local project.
+
+Recommended role for that Automation:
+
+- read `11_RUN_CONTROL/control_plane/state/status_snapshot.json`
+- compare it against the latest reports and decision log
+- produce a short executive check-in
+
+Do not use the Automation to launch pods or mutate repo state. The operator, not the scheduled thread, remains the execution engine.
