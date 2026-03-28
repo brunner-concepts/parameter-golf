@@ -293,3 +293,18 @@ Use one final self-funded RunPod envelope of `$100` to run a pinned-manifest `#8
 1. Freeze a tracked `#868` challenge-data surface in repo state and feed it into the next generated parity rerun spec.
 2. Restrict the next autonomous spend campaign to the pinned-manifest `repro_pr868_parity_full` path only.
 3. Do not open a competition PR until the parity rerun resolves whether `#868` is an understood reproduction or a still-unexplained divergence.
+
+## 2026-03-28 — Immediate launch approved for the final `#868` parity campaign
+
+**Decision:**
+Activate the final self-funded `#868` parity campaign immediately instead of waiting for the next UTC billing window.
+
+**Rationale:**
+- The user explicitly approved spending the last bounded `$100` envelope now.
+- The project is blocked on one parity question, not on a broad frontier search, so starting the bounded rerun now has positive expected value.
+- The cleanest remaining guardrail is not the old daily cap; it is the campaign envelope itself plus the single approved run path.
+
+**Consequences:**
+1. Update the tracked campaign activation time and baseline balance to “now”.
+2. Apply a one-time runtime cap override high enough to let the final campaign start immediately, while leaving the `$100` campaign envelope as the real stop condition.
+3. Launch only the pinned-manifest `repro_pr868_parity_full` path and stop new compute again once that campaign resolves.
