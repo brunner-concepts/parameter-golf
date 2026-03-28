@@ -429,6 +429,7 @@ def deterministic_reply(root: Path, live_root: Path, user_text: str) -> str | No
     budget_state = read_json(root / "11_RUN_CONTROL/control_plane/state/budget_state.json")
     status_snapshot = read_json(root / "11_RUN_CONTROL/control_plane/state/status_snapshot.json")
     funding_ledger = read_json(root / "11_RUN_CONTROL/funding_ledger.json")
+    campaign = status_snapshot.get("campaign", {})
     snapshot = active_snapshot(live_root) or {}
     override_path = overrides_path(root)
     overrides = read_overrides(override_path)
@@ -460,6 +461,14 @@ def deterministic_reply(root: Path, live_root: Path, user_text: str) -> str | No
             f"daily_cap=${float(budget_state.get('daily_cap_usd', 0.0)):.2f}",
             f"current_spend_per_hr=${float(budget_state.get('current_spend_per_hr', 0.0)):.3f}",
         ]
+        if campaign.get("enabled"):
+            lines.extend(
+                [
+                    f"campaign_max_additional_spend=${float(campaign.get('max_additional_spend_usd', 0.0)):.2f}",
+                    f"campaign_additional_spend_used=${float(campaign.get('additional_spend_used_usd', 0.0)):.2f}",
+                    f"campaign_activation_time={campaign.get('activation_time')}",
+                ]
+            )
         self_funded = funding_ledger.get("self_funded_reload_total_usd")
         sponsored = funding_ledger.get("sponsored_credit_total_usd")
         if isinstance(self_funded, (int, float)):
@@ -505,6 +514,14 @@ def deterministic_reply(root: Path, live_root: Path, user_text: str) -> str | No
         milestone = status_snapshot.get("next_milestone", {})
         if summary:
             lines = ["Parameter Golf Status", summary]
+            if campaign.get("enabled"):
+                lines.extend(
+                    [
+                        "",
+                        "Campaign:",
+                        f"{campaign.get('id')} (${float(campaign.get('additional_spend_used_usd', 0.0)):.2f}/${float(campaign.get('max_additional_spend_usd', 0.0)):.2f} used)",
+                    ]
+                )
             if milestone:
                 lines.extend(
                     [
@@ -535,6 +552,14 @@ def deterministic_reply(root: Path, live_root: Path, user_text: str) -> str | No
                     "",
                     "Grant timing:",
                     f"{grant_status.get('recommended_timing')} ({grant_status.get('blocking_reason')})",
+                ]
+            )
+        if campaign.get("enabled"):
+            lines.extend(
+                [
+                    "",
+                    "Campaign:",
+                    f"{campaign.get('id')} activates at {campaign.get('activation_time')} and is capped at ${float(campaign.get('max_additional_spend_usd', 0.0)):.2f}.",
                 ]
             )
         return "\n".join(lines)

@@ -9,6 +9,8 @@ from huggingface_hub import hf_hub_download
 
 REPO_ID = os.environ.get("MATCHED_FINEWEB_REPO_ID", "willdepueoai/parameter-golf")
 REMOTE_ROOT_PREFIX = os.environ.get("MATCHED_FINEWEB_REMOTE_ROOT_PREFIX", "datasets")
+REPO_REVISION = os.environ.get("MATCHED_FINEWEB_REVISION")
+MANIFEST_OVERRIDE_PATH = os.environ.get("MATCHED_FINEWEB_MANIFEST_PATH")
 ROOT = Path(__file__).resolve().parent
 DATASETS_DIR = ROOT / "datasets"
 TOKENIZERS_DIR = ROOT / "tokenizers"
@@ -46,6 +48,7 @@ def get(relative_path: str) -> None:
             filename=remote_path.name,
             subfolder=remote_path.parent.as_posix() if remote_path.parent != Path(".") else None,
             repo_type="dataset",
+            revision=REPO_REVISION,
         )
     )
     # HF cache entries may be snapshot symlinks. Resolve to the underlying blob so we
@@ -114,17 +117,33 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Also download docs_selected.jsonl and its sidecar for tokenizer retraining or dataset re-export.",
     )
+    parser.add_argument(
+        "--manifest-path",
+        default=MANIFEST_OVERRIDE_PATH,
+        help="Use a pinned local manifest.json instead of downloading the latest remote manifest.",
+    )
+    parser.add_argument(
+        "--repo-revision",
+        default=REPO_REVISION,
+        help="Pin all Hugging Face downloads to a specific dataset repo revision.",
+    )
     return parser
 
 
 def main() -> None:
     args = build_parser().parse_args()
+    global REPO_REVISION, MANIFEST_OVERRIDE_PATH
+    REPO_REVISION = args.repo_revision or None
+    MANIFEST_OVERRIDE_PATH = args.manifest_path or None
     dataset_dir = dataset_dir_for_variant(args.variant)
     train_shards = args.train_shards_positional if args.train_shards_positional is not None else args.train_shards
     if train_shards < 0:
         raise ValueError("train_shards must be non-negative")
 
-    manifest = load_manifest(skip_manifest_download=args.skip_manifest)
+    if MANIFEST_OVERRIDE_PATH:
+        manifest = json.loads(Path(MANIFEST_OVERRIDE_PATH).read_text(encoding="utf-8"))
+    else:
+        manifest = load_manifest(skip_manifest_download=args.skip_manifest)
     dataset_entry = next((x for x in manifest.get("datasets", []) if x.get("name") == dataset_dir), None)
     if dataset_entry is None:
         raise ValueError(f"dataset {dataset_dir} not found in {REMOTE_ROOT_PREFIX}/manifest.json")

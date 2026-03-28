@@ -176,3 +176,20 @@ Tracked funding context lives in:
 - `11_RUN_CONTROL/funding_ledger.json`
 
 That file is intentionally separate from the ignored runtime state so the self-funded RunPod spend and sponsored credits can be cited in external write-ups without scraping the billing UI again.
+
+## Parity campaign controls
+
+The current `#868` parity rerun campaign is also tracked in repo state:
+
+- `11_RUN_CONTROL/control_plane/spend_campaign.json`
+- `11_RUN_CONTROL/control_plane/data_surfaces/pr868_manifest_snapshot.json`
+- `11_RUN_CONTROL/control_plane/data_surfaces/pr868_surface_snapshot.json`
+
+Those files define:
+
+- the final self-funded spend envelope for the next parity campaign
+- the activation time for that spend window
+- the only approved auto-launch under that envelope
+- the exact pinned challenge manifest and Hugging Face revision for the rerun
+
+This is the control plane’s answer to the unresolved `#868` mismatch: no more blind reruns against a moving evaluation surface.

@@ -1,0 +1,69 @@
+{
+  "append_eos": false,
+  "dataset_revision": "9bb295ddab0e05d785b879661af7260fed5140fc",
+  "datasets": [
+    {
+      "bos_id": 1,
+      "eos_id": 2,
+      "name": "fineweb10B_sp1024",
+      "path": "datasets/fineweb10B_sp1024",
+      "recommended_bigram_vocab_size": 5120,
+      "stats": {
+        "docs_total": 15368808,
+        "docs_train": 15318808,
+        "docs_val": 50000,
+        "files_total": 196,
+        "files_train": 195,
+        "files_val": 1,
+        "tokens_total": 19535223186,
+        "tokens_train": 19473201340,
+        "tokens_val": 62021846
+      },
+      "tokenizer_kind": "sentencepiece_bpe",
+      "tokenizer_name": "sp_bpe_1024",
+      "train_glob": "datasets/fineweb10B_sp1024/fineweb_train_*.bin",
+      "val_glob": "datasets/fineweb10B_sp1024/fineweb_val_*.bin",
+      "vocab_size": 1024
+    }
+  ],
+  "docs_jsonl": "docs_selected.jsonl",
+  "docs_meta": {
+    "dataset_fingerprint": null,
+    "docs_sha256": null,
+    "num_docs": 15368808,
+    "remote_name": "external_cache"
+  },
+  "num_docs": 15368808,
+  "num_val_docs": 50000,
+  "shard_size": 100000000,
+  "shuffle_seed": 1337,
+  "tokenizer_specs": [
+    {
+      "_base_dir": ".",
+      "builder": "demo_tokenizer_builders:build_sentencepiece_tokenizer",
+      "dataset_suffix": "sp1024",
+      "name": "sp_bpe_1024",
+      "vocab_size": 1024
+    }
+  ],
+  "tokenizers": [
+    {
+      "bos_id": 1,
+      "eos_id": 2,
+      "kind": "sentencepiece_bpe",
+      "model_path": "tokenizers/fineweb_1024_bpe.model",
+      "name": "sp_bpe_1024",
+      "recommended_bigram_vocab_size": 5120,
+      "source_spec": {
+        "builder": "demo_tokenizer_builders:build_sentencepiece_tokenizer",
+        "dataset_suffix": "sp1024",
+        "name": "sp_bpe_1024",
+        "tokenizer_train_docs": 5000000,
+        "vocab_size": 1024
+      },
+      "vocab_path": "tokenizers/fineweb_1024_bpe.vocab",
+      "vocab_size": 1024
+    }
+  ],
+  "version": "10B"
+}

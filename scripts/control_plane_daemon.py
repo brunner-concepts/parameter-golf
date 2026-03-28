@@ -303,6 +303,28 @@ def load_overrides(state_root: Path) -> dict[str, Any]:
     return read_json_if_exists(state_root / "operator_overrides.json")
 
 
+def load_spend_campaign(control_root: Path) -> dict[str, Any]:
+    return read_json_if_exists(control_root / "spend_campaign.json")
+
+
+def campaign_additional_spend(campaign: dict[str, Any], budget_state: dict[str, Any]) -> float:
+    activation_time = parse_utc_timestamp(campaign.get("activation_time"))
+    if activation_time is not None and datetime.now(timezone.utc) < activation_time:
+        return 0.0
+    try:
+        baseline = float(campaign.get("baseline_client_balance_usd"))
+        current = float(budget_state.get("client_balance", baseline))
+    except (TypeError, ValueError):
+        return 0.0
+    return round(max(0.0, baseline - current), 4)
+
+
+def pr868_surface_paths() -> tuple[Path, Path]:
+    root = repo_root()
+    base = root / "11_RUN_CONTROL/control_plane/data_surfaces"
+    return base / "pr868_manifest_snapshot.json", base / "pr868_surface_snapshot.json"
+
+
 def billing_window_bounds() -> tuple[str, str, str]:
     now = datetime.now(timezone.utc)
     start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
@@ -594,6 +616,7 @@ def build_pr868_specs(generated_root: Path) -> dict[str, Path]:
     ensure_dirs(generated_root)
     smoke_path = generated_root / "repro_pr868_smoke.json"
     full_path = generated_root / "repro_pr868_full.json"
+    parity_full_path = generated_root / "repro_pr868_parity_full.json"
     env = {
         **common_spec_env(),
         "UPSTREAM_RECORD_DIR": "third_party/upstream_prs/pr868",
@@ -728,9 +751,84 @@ def build_pr868_specs(generated_root: Path) -> dict[str, Path]:
         "success_summary": "PR #868 full repro completed. Capture BPB, eval time, and artifact size before any #933 work.",
         "manual_next_command": "Write 09_RESULTS/repro_868.md and decide whether the higher-upside #933 path is justified.",
     }
+    manifest_path, surface_path = pr868_surface_paths()
+    parity_env = dict(env)
+    if manifest_path.exists() and surface_path.exists():
+        surface = read_json_if_exists(surface_path)
+        parity_env.update(
+            {
+                "MATCHED_FINEWEB_MANIFEST_PATH": "${REPO_DIR}/11_RUN_CONTROL/control_plane/data_surfaces/pr868_manifest_snapshot.json",
+                "MATCHED_FINEWEB_REVISION": str(surface.get("repo_revision", "")),
+                "MATCHED_FINEWEB_REPO_ID": str(surface.get("repo_id", "willdepueoai/parameter-golf")),
+                "MATCHED_FINEWEB_REMOTE_ROOT_PREFIX": str(surface.get("remote_root_prefix", "datasets")),
+            }
+        )
+    parity_full_spec = {
+        "schema_version": 1,
+        "run_id": "repro_pr868_parity_full",
+        "hypothesis": "Re-run PR #868 on 8x H100 SXM with a pinned challenge-data manifest and repo revision so the eval surface can be compared directly against the published seed logs.",
+        "parent_branch": "repro/pr868",
+        "track": "cache",
+        "compute_tier": "8xH100-SXM",
+        "auto_promote": False,
+        "promotion_gate": "The pinned-manifest rerun must explain the #868 parity gap before any PR packaging or higher-upside cache spend.",
+        "env": parity_env,
+        "phases": [
+            {
+                "id": "bootstrap_env",
+                "description": "Prepare the repo, virtualenv, zstandard, and flash_attn_interface on the 8x pod.",
+                "command": "bash scripts/bootstrap_runpod_env.sh",
+                "cwd": "${REPO_DIR}",
+                "log_name": "bootstrap_env.log",
+                "failure_summary": "Fix the bootstrap path before retrying the pinned-manifest PR #868 parity rerun.",
+            },
+            {
+                "id": "install_requirements",
+                "description": "Install the PR-specific requirements before running the 8x pinned-manifest parity path.",
+                "command": "bash scripts/install_upstream_requirements.sh",
+                "cwd": "${REPO_DIR}",
+                "log_name": "install_requirements.log",
+                "failure_summary": "Fix the upstream dependency failure before retrying the pinned-manifest PR #868 rerun.",
+            },
+            {
+                "id": "prepare_data",
+                "description": "Download the full sp1024 dataset cache using the frozen manifest and repo revision.",
+                "command": "bash scripts/prepare_parameter_golf_data.sh",
+                "cwd": "${REPO_DIR}",
+                "log_name": "prepare_data.log",
+                "failure_summary": "Fix the pinned challenge-data bootstrap issue before retrying the PR #868 parity rerun.",
+            },
+            {
+                "id": "run_full_repro",
+                "description": "Run the published PR #868 record path on 8 GPUs with the pinned eval surface.",
+                "command": "bash scripts/run_upstream_record.sh",
+                "cwd": "${REPO_DIR}",
+                "log_name": "pr868_parity_full.log",
+                "env": {
+                    "RUN_ID": "pr868_parity_full",
+                    "RUN_PROFILE": "full_8gpu_600s",
+                    "MODEL_PRESET": "frontier_lean",
+                    "TTT_ENABLED": "0",
+                    "QAT_MODE": "off",
+                    "NGRAM_EVAL_ENABLED": "1",
+                    "NGRAM_EVAL_MAX_ORDER": "12",
+                    "NGRAM_TWO_PASS_ENABLED": "1",
+                    "NGRAM_TWO_PASS_RESCORE_CHUNKS": "72",
+                    "NGRAM_BUDGETED_TUNER": "1",
+                    "NGRAM_BUDGET_TARGET_SECONDS": "580",
+                    "NGRAM_BUDGET_SAFETY_SECONDS": "8",
+                    "NPROC_PER_NODE": "8",
+                },
+                "failure_summary": "Investigate the exact pinned-manifest PR #868 parity failure before any further cache spend.",
+            },
+        ],
+        "success_summary": "Pinned-manifest PR #868 rerun completed. Compare chunk counts, tuned chunk budget, runtime, and exact BPB against upstream before any PR decision.",
+        "manual_next_command": "Write 09_RESULTS/repro_pr868_parity_full.md and decide whether PR #868 is now understood or still divergent.",
+    }
     atomic_write_json(smoke_path, smoke_spec)
     atomic_write_json(full_path, full_spec)
-    return {"smoke": smoke_path, "full": full_path}
+    atomic_write_json(parity_full_path, parity_full_spec)
+    return {"smoke": smoke_path, "full": full_path, "parity_full": parity_full_path}
 
 
 def build_pr933_specs(generated_root: Path) -> dict[str, Path]:
@@ -854,6 +952,7 @@ def evaluate_queue(
     generated_specs: dict[str, dict[str, Path]],
     supervisor_proc: subprocess.Popen[str] | None,
     overrides: dict[str, Any],
+    spend_campaign: dict[str, Any],
 ) -> dict[str, Any]:
     queue_state: dict[str, Any] = {
         "updated_at": utc_now(),
@@ -865,6 +964,7 @@ def evaluate_queue(
         "next_spec": None,
         "next_run_id": None,
         "next_target_pr": None,
+        "campaign": {},
     }
     if bool(overrides.get("paused", False)):
         queue_state["blocked"] = True
@@ -888,16 +988,19 @@ def evaluate_queue(
 
     smoke = live_run_snapshot(live_root, "repro_pr868_smoke")
     full = live_run_snapshot(live_root, "repro_pr868_full")
+    parity_full = live_run_snapshot(live_root, "repro_pr868_parity_full")
     smoke_terminal = smoke.get("terminal_result", {}).get("status")
     full_terminal = full.get("terminal_result", {}).get("status")
+    parity_terminal = parity_full.get("terminal_result", {}).get("status")
     stale_supervisor_timeout = int(policy.get("stale_supervisor_state_timeout_seconds", 180))
     smoke_supervisor_state = smoke.get("supervisor_state", {})
     full_supervisor_state = full.get("supervisor_state", {})
-    smoke_supervisor = smoke_supervisor_state.get("status")
-    full_supervisor = full_supervisor_state.get("status")
+    parity_supervisor_state = parity_full.get("supervisor_state", {})
 
     if supervisor_state_is_fresh(smoke_supervisor_state, stale_supervisor_timeout) or supervisor_state_is_fresh(
         full_supervisor_state, stale_supervisor_timeout
+    ) or supervisor_state_is_fresh(
+        parity_supervisor_state, stale_supervisor_timeout
     ):
         queue_state["blocked"] = True
         queue_state["blocked_reason"] = "orphaned_supervisor_state_manual_review"
@@ -910,17 +1013,64 @@ def evaluate_queue(
         queue_state["blocked"] = True
         queue_state["blocked_reason"] = "pr868_full_failed_manual_review"
         return queue_state
-    if smoke_terminal in {"complete", "dry-run-complete"} and full_terminal in {"complete", "dry-run-complete"}:
+    if parity_terminal == "failed":
         queue_state["blocked"] = True
-        queue_state["blocked_reason"] = "pr868_full_already_complete"
+        queue_state["blocked_reason"] = "pr868_parity_full_failed_manual_review"
         return queue_state
+    if parity_terminal in {"complete", "dry-run-complete"}:
+        queue_state["blocked"] = True
+        queue_state["blocked_reason"] = "pr868_parity_full_complete_review"
+        return queue_state
+
+    manifest_path, surface_path = pr868_surface_paths()
+    parity_ready = manifest_path.exists() and surface_path.exists()
+    queue_state["parity_surface_ready"] = parity_ready
+    queue_state["parity_manifest_path"] = str(manifest_path)
+    queue_state["parity_surface_path"] = str(surface_path)
 
     if smoke_terminal not in {"complete", "dry-run-complete"}:
         next_spec = generated_specs["868"]["smoke"]
         next_run_id = "repro_pr868_smoke"
-    else:
+    elif full_terminal not in {"complete", "dry-run-complete"}:
         next_spec = generated_specs["868"]["full"]
         next_run_id = "repro_pr868_full"
+    elif not parity_ready:
+        queue_state["blocked"] = True
+        queue_state["blocked_reason"] = "pr868_parity_prep_required"
+        return queue_state
+    else:
+        next_spec = generated_specs["868"]["parity_full"]
+        next_run_id = "repro_pr868_parity_full"
+
+    campaign_enabled = bool(spend_campaign.get("enabled", False))
+    campaign_allowed_run_ids = set(spend_campaign.get("allowed_run_ids") or [])
+    if campaign_enabled:
+        additional_spend = campaign_additional_spend(spend_campaign, budget_state)
+        queue_state["campaign"] = {
+            "id": spend_campaign.get("id"),
+            "target_pr": spend_campaign.get("target_pr"),
+            "allowed_run_ids": sorted(campaign_allowed_run_ids),
+            "activation_time": spend_campaign.get("activation_time"),
+            "max_additional_spend_usd": spend_campaign.get("max_additional_spend_usd"),
+            "additional_spend_used_usd": additional_spend,
+        }
+        activation_time = parse_utc_timestamp(spend_campaign.get("activation_time"))
+        if activation_time is not None and datetime.now(timezone.utc) < activation_time:
+            queue_state["blocked"] = True
+            queue_state["blocked_reason"] = "campaign_waiting_for_activation"
+            return queue_state
+        if next_run_id not in campaign_allowed_run_ids:
+            queue_state["blocked"] = True
+            queue_state["blocked_reason"] = "campaign_waiting_for_allowed_run"
+            return queue_state
+        try:
+            max_additional_spend = float(spend_campaign.get("max_additional_spend_usd", 0.0))
+        except (TypeError, ValueError):
+            max_additional_spend = 0.0
+        if max_additional_spend > 0 and additional_spend >= max_additional_spend:
+            queue_state["blocked"] = True
+            queue_state["blocked_reason"] = "campaign_budget_exhausted"
+            return queue_state
 
     next_spec_payload = read_json_if_exists(next_spec)
     tier = next_spec_payload.get("compute_tier", "1xH100-smoke")
@@ -1161,11 +1311,37 @@ def executive_diagnosis(
             "The operator stopped because projected spend would exceed the current daily cap.",
             "Wait for the next budget window or raise the cap override if that is strategically justified.",
         )
+    if queue_state.get("blocked") and queue_state.get("blocked_reason") == "campaign_waiting_for_activation":
+        activation_time = ((queue_state.get("campaign") or {}).get("activation_time") or "the next campaign window")
+        return (
+            "campaign_waiting_for_activation",
+            "The next PR #868 spend campaign is armed, but it is waiting for the post-cap reset launch window.",
+            f"Do not launch new GPU work before {activation_time}; the next allowed run is the pinned-manifest PR #868 parity rerun.",
+        )
+    if queue_state.get("blocked") and queue_state.get("blocked_reason") == "campaign_budget_exhausted":
+        campaign = queue_state.get("campaign") or {}
+        return (
+            "campaign_budget_exhausted",
+            "The bounded PR #868 parity campaign has spent its final self-funded envelope.",
+            f"Stop launching new compute, preserve the current evidence, and move to the next grant request. Additional spend used: ${float(campaign.get('additional_spend_used_usd', 0.0)):.2f}.",
+        )
+    if queue_state.get("blocked") and queue_state.get("blocked_reason") == "pr868_parity_prep_required":
+        return (
+            "pr868_parity_prep_required",
+            "PR #868 needs a pinned challenge manifest and validation-shard surface before the next rerun is worth spending money on.",
+            "Freeze the exact challenge-data surface into the repo, then allow one bounded 8x parity rerun under the final self-funded campaign.",
+        )
     if queue_state.get("blocked") and queue_state.get("blocked_reason") == "pr868_full_already_complete":
         return (
             "pr868_eval_surface_review",
             "PR #868 full repro is complete, and the leading diagnosis is eval-surface drift rather than base-model mismatch.",
             "Keep the queue paused, pin the exact challenge manifest and validation-shard surface, then rerun #868 only after that evidence path is in place.",
+        )
+    if queue_state.get("blocked") and queue_state.get("blocked_reason") == "pr868_parity_full_complete_review":
+        return (
+            "pr868_parity_rerun_review",
+            "The pinned-manifest PR #868 rerun is complete and ready for a final parity decision.",
+            "Compare chunk counts, tuned chunks, runtime, and exact BPB against upstream, then decide whether #868 is understood enough for promotion or still blocked.",
         )
     if queue_state.get("next_run_id"):
         return (
@@ -1188,6 +1364,7 @@ def build_executive_state(
     queue_state: dict[str, Any],
     provider_storage_state: dict[str, Any],
     overrides: dict[str, Any],
+    spend_campaign: dict[str, Any],
 ) -> dict[str, Any]:
     diagnosis_key, diagnosis, next_action = executive_diagnosis(
         frontier_snapshot,
@@ -1212,6 +1389,13 @@ def build_executive_state(
             "daily_cap_usd": budget_state.get("daily_cap_usd"),
             "current_spend_per_hr": budget_state.get("current_spend_per_hr"),
             "reserve_floor_usd": budget_state.get("minimum_runpod_balance_reserve_usd"),
+        },
+        "campaign": {
+            "enabled": spend_campaign.get("enabled", False),
+            "id": spend_campaign.get("id"),
+            "activation_time": spend_campaign.get("activation_time"),
+            "max_additional_spend_usd": spend_campaign.get("max_additional_spend_usd"),
+            "additional_spend_used_usd": campaign_additional_spend(spend_campaign, budget_state) if spend_campaign else 0.0,
         },
         "provider_storage": {
             "status": provider_storage_state.get("status"),
@@ -1240,6 +1424,8 @@ def write_working_memory(state_root: Path, executive_state: dict[str, Any]) -> N
         f"- queue_blocked_reason: `{executive_state.get('queue_blocked_reason')}`",
         f"- spent_today_usd: `{executive_state.get('budget', {}).get('spent_today_usd')}`",
         f"- daily_cap_usd: `{executive_state.get('budget', {}).get('daily_cap_usd')}`",
+        f"- campaign_additional_spend_used_usd: `{executive_state.get('campaign', {}).get('additional_spend_used_usd')}`",
+        f"- campaign_max_additional_spend_usd: `{executive_state.get('campaign', {}).get('max_additional_spend_usd')}`",
         f"- provider_storage_status: `{executive_state.get('provider_storage', {}).get('status')}`",
         "",
         "## Diagnosis",
@@ -1333,17 +1519,27 @@ def build_status_snapshot(
     frontier_snapshot: dict[str, Any],
 ) -> dict[str, Any]:
     root = repo_root()
+    control_root = root / "11_RUN_CONTROL/control_plane"
     full_report = parse_structured_report(root / "09_RESULTS/repro_pr868_full.md")
     mismatch_audit = parse_structured_report(root / "09_RESULTS/repro_pr868_mismatch_audit.md")
     funding_ledger = read_json_if_exists(root / "11_RUN_CONTROL/funding_ledger.json")
+    spend_campaign = load_spend_campaign(control_root)
     diagnosis_key = executive_state.get("diagnosis_key")
     next_milestone = {
         "id": "pr868_parity_rerun_readiness",
         "title": "PR #868 parity rerun readiness",
-        "status": "blocked" if diagnosis_key == "pr868_eval_surface_review" else "in_progress",
+        "status": (
+            "blocked"
+            if diagnosis_key in {"pr868_eval_surface_review", "pr868_parity_prep_required"}
+            else "complete"
+            if diagnosis_key == "pr868_parity_rerun_review"
+            else "in_progress"
+        ),
         "blocking_reason": (
             "Need a pinned challenge manifest and validation-shard surface before another #868 confirmation run."
-            if diagnosis_key == "pr868_eval_surface_review"
+            if diagnosis_key in {"pr868_eval_surface_review", "pr868_parity_prep_required"}
+            else "Waiting for the bounded parity campaign activation window."
+            if diagnosis_key == "campaign_waiting_for_activation"
             else "Need the current control-plane diagnosis to settle into a submission decision."
         ),
         "completion_gate": "Capture exact challenge manifest and shard inventory, then prepare a pinned-manifest #868 rerun path.",
@@ -1359,13 +1555,23 @@ def build_status_snapshot(
     }
     competition_pr_status = {
         "ready": False,
-        "blocking_reason": "PR #868 still has an unresolved eval-surface mismatch and should not be packaged as a competition PR yet.",
+        "blocking_reason": (
+            "PR #868 still has an unresolved eval-surface mismatch and should not be packaged as a competition PR yet."
+            if diagnosis_key != "pr868_parity_rerun_review"
+            else "The pinned-manifest rerun is complete, but it still needs an explicit parity decision before any PR packaging."
+        ),
     }
     self_funded_total = funding_ledger.get("self_funded_reload_total_usd")
     sponsored_total = funding_ledger.get("sponsored_credit_total_usd")
+    if diagnosis_key == "campaign_waiting_for_activation":
+        lead = "PR #868 full repro completed, the eval surface is now pinned, and the next bounded parity rerun is waiting for the post-cap activation window."
+    elif diagnosis_key == "pr868_parity_rerun_review":
+        lead = "The pinned-manifest PR #868 parity rerun is complete and ready for a final reproduction decision."
+    else:
+        lead = "PR #868 full repro completed on 8x H100 SXM and the leading diagnosis is eval-surface drift, not base-model mismatch."
     summary_lines = [
-        "PR #868 full repro completed on 8x H100 SXM and the leading diagnosis is eval-surface drift, not base-model mismatch.",
-        f"Current operator state is paused on review with no active pods; balance is ${float(budget_state.get('client_balance', 0.0)):.2f} and spend today is ${float(budget_state.get('spent_today_usd', 0.0)):.2f}.",
+        lead,
+        f"Current operator state has no active pods; balance is ${float(budget_state.get('client_balance', 0.0)):.2f} and spend today is ${float(budget_state.get('spent_today_usd', 0.0)):.2f}.",
     ]
     if isinstance(self_funded_total, (int, float)) or isinstance(sponsored_total, (int, float)):
         funded_parts = []
@@ -1374,6 +1580,10 @@ def build_status_snapshot(
         if isinstance(sponsored_total, (int, float)):
             funded_parts.append(f"${float(sponsored_total):.0f} sponsored credit")
         summary_lines.append("Funding evidence captured: " + ", ".join(funded_parts) + ".")
+    if spend_campaign.get("enabled"):
+        summary_lines.append(
+            "A final self-funded PR #868 parity campaign is configured with a $100 envelope and a stop-after-milestone rule."
+        )
     summary_lines.append("Next milestone is a pinned-manifest #868 rerun path; competition PR submission remains blocked until that parity issue is resolved.")
     return {
         "updated_at": utc_now(),
@@ -1384,6 +1594,8 @@ def build_status_snapshot(
             "full_repro_report_path": "09_RESULTS/repro_pr868_full.md",
             "mismatch_audit_path": "09_RESULTS/repro_pr868_mismatch_audit.md",
             "funding_ledger_path": "11_RUN_CONTROL/funding_ledger.json",
+            "spend_campaign_path": "11_RUN_CONTROL/control_plane/spend_campaign.json",
+            "surface_snapshot_path": "11_RUN_CONTROL/control_plane/data_surfaces/pr868_surface_snapshot.json",
         },
         "summary": " ".join(summary_lines),
         "diagnosis": {
@@ -1407,6 +1619,16 @@ def build_status_snapshot(
             "active_pod_count": budget_state.get("active_pod_count"),
             "billing_window_start": budget_state.get("billing_window_start"),
             "billing_window_end": budget_state.get("billing_window_end"),
+        },
+        "campaign": {
+            "enabled": spend_campaign.get("enabled", False),
+            "id": spend_campaign.get("id"),
+            "target_pr": spend_campaign.get("target_pr"),
+            "activation_time": spend_campaign.get("activation_time"),
+            "max_additional_spend_usd": spend_campaign.get("max_additional_spend_usd"),
+            "baseline_client_balance_usd": spend_campaign.get("baseline_client_balance_usd"),
+            "additional_spend_used_usd": campaign_additional_spend(spend_campaign, budget_state) if spend_campaign else 0.0,
+            "allowed_run_ids": spend_campaign.get("allowed_run_ids", []),
         },
         "funding": funding_ledger,
         "latest_results": {
@@ -1766,7 +1988,14 @@ def main() -> int:
     live_root = (root / args.live_root).resolve()
     control_root = state_root.parent
     events_path = state_root / "events.jsonl"
-    ensure_dirs(state_root, live_root, control_root / "advisory", control_root / "generated_specs", control_root / "upstream_prs")
+    ensure_dirs(
+        state_root,
+        live_root,
+        control_root / "advisory",
+        control_root / "generated_specs",
+        control_root / "upstream_prs",
+        control_root / "data_surfaces",
+    )
 
     policy = read_json_if_exists(policy_path)
     if not policy:
@@ -1787,6 +2016,7 @@ def main() -> int:
 
     while True:
         overrides = load_overrides(state_root)
+        spend_campaign = load_spend_campaign(control_root)
         now = time.monotonic()
         if now >= frontier_due or not frontier_snapshot:
             frontier_snapshot = sync_frontier(policy, control_root, state_root, events_path, frontier_snapshot)
@@ -1808,7 +2038,16 @@ def main() -> int:
             )
             budget_state = refresh_budget(policy, state_root, events_path, overrides)
             recover_orphaned_supervisor_states(live_root, state_root, events_path, budget_state, supervisor_proc)
-            queue_state = evaluate_queue(policy, frontier_snapshot, budget_state, live_root, generated_specs, supervisor_proc, overrides)
+            queue_state = evaluate_queue(
+                policy,
+                frontier_snapshot,
+                budget_state,
+                live_root,
+                generated_specs,
+                supervisor_proc,
+                overrides,
+                spend_campaign,
+            )
             if args.no_launch:
                 provider_storage_state = read_json_if_exists(state_root / "provider_storage_state.json")
             else:
@@ -1827,7 +2066,16 @@ def main() -> int:
             if not args.no_launch and supervisor_proc is None and queue_state.get("next_spec") and not queue_state.get("blocked"):
                 supervisor_proc = maybe_launch_next(queue_state, state_root, policy, provider_storage_state)
                 budget_state = refresh_budget(policy, state_root, events_path, overrides)
-                queue_state = evaluate_queue(policy, frontier_snapshot, budget_state, live_root, generated_specs, supervisor_proc, overrides)
+                queue_state = evaluate_queue(
+                    policy,
+                    frontier_snapshot,
+                    budget_state,
+                    live_root,
+                    generated_specs,
+                    supervisor_proc,
+                    overrides,
+                    spend_campaign,
+                )
                 provider_storage_state = maybe_prepare_provider_storage(policy, state_root, events_path, queue_state)
                 atomic_write_json(state_root / "queue.json", queue_state)
             maybe_record_supervisor_exit(state_root, queue_state, supervisor_proc)
@@ -1841,6 +2089,7 @@ def main() -> int:
                 queue_state,
                 provider_storage_state,
                 overrides,
+                spend_campaign,
             )
             atomic_write_json(state_root / "executive_state.json", executive_state)
             write_working_memory(state_root, executive_state)

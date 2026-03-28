@@ -5,6 +5,8 @@
 Tracked files:
 
 - `operator_policy.json`: hard guardrails for budget, target ranking, and autonomy
+- `spend_campaign.json`: the currently approved bounded spend envelope for the next autonomous campaign
+- `data_surfaces/`: frozen challenge-data manifests and shard inventories for parity reruns
 
 Ignored runtime directories:
 

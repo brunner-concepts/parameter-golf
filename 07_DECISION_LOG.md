@@ -277,3 +277,19 @@ Do not submit a PR or spend another blind 8x run on `#868` yet. Treat the curren
 1. Add an audit report for `repro_pr868_mismatch_audit` and keep `#868` in review until data/eval parity is proven.
 2. Make future cache repros capture the challenge manifest and validation shard inventory into run artifacts.
 3. Do not cite `0.09749802` as a validated reproduction or competition-ready result; it is a strong internal signal, not a packaged submission.
+
+## 2026-03-28 — Final self-funded spend should go to one pinned-manifest `#868` parity campaign
+
+**Decision:**
+Use one final self-funded RunPod envelope of `$100` to run a pinned-manifest `#868` parity campaign, then stop new compute and move to the next credit request or PR decision from that evidence.
+
+**Rationale:**
+- The project is not blocked by lack of balance; it is blocked by one unresolved parity question.
+- The highest-EV next spend is not a broader frontier search. It is a single bounded rerun that freezes the challenge manifest, validation-shard surface, and dataset repo revision.
+- If that rerun lands near the published `0.1181`, `#868` becomes understood and the next credit request becomes much stronger.
+- If it still lands near `0.0975` under the pinned surface, that is no longer “just a mismatch”; it becomes a materially more interesting result that can justify a different follow-on plan.
+
+**Consequences:**
+1. Freeze a tracked `#868` challenge-data surface in repo state and feed it into the next generated parity rerun spec.
+2. Restrict the next autonomous spend campaign to the pinned-manifest `repro_pr868_parity_full` path only.
+3. Do not open a competition PR until the parity rerun resolves whether `#868` is an understood reproduction or a still-unexplained divergence.
