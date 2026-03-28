@@ -183,3 +183,18 @@ Pause `#414` full reproduction as the default next action and pivot the projectâ
 1. Project memory must stop describing `#414 -> #549/#606/#615` as the shortest winning Track B route.
 2. Highest-priority reproduction work becomes exact upstream sync and evaluation of conservative, record-eligible cache methods.
 3. Pure-neural lanes (`#414`, `#505`, GEPA + TTT, micro-deltas) should remain paused unless they directly support the cache route or a packaging fallback.
+
+## 2026-03-28 â€” #933 becomes the top live target, but not automatically the safest first target
+
+**Decision:**
+Treat PR `#933` as the strongest live target to understand, but keep a conservative cache reproduction (`#868`) as the likely first route to spend serious reproduction compute on until the two-pass legality question is clearer.
+
+**Rationale:**
+- Issue `#140` updated on March 27, 2026 now lists `#933` at `0.0804` as the top record-eligible pending submission.
+- PR `#933` itself explicitly says the legality of its two-pass full-rescore evaluation is under active discussion.
+- Therefore, `#933` is the highest-upside frontier target, but not automatically the best first accepted-record bet.
+
+**Consequences:**
+1. Sync `#933` artifacts immediately so the repo can inspect them exactly.
+2. Keep the operator/control plane narrow and reliable; do not respond to frontier motion by building a larger autonomous daemon.
+3. Choose reproduction order based on accepted-record probability, not just raw BPB.

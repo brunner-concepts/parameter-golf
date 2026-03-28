@@ -7,7 +7,7 @@ Ship the earliest legally defensible PR that is accepted as the new official rec
 ## Current target to beat
 
 Official SOTA: **1.1194 BPB** (PR #549, merged March 24, 2026)
-Best pending record-eligible submission: **0.0887 BPB** (#913, Cache Is All You Need, 3-seed mean, March 27, 2026)
+Best pending record-eligible submission: **0.0804 BPB** (#933, CacheMoney, 3-seed mean, March 27, 2026)
 Best conservative stepping-stone cache submission: **0.1181 BPB** (#868, Budgeted Two-Pass N-gram Backoff)
 
 To land an accepted record, the submission must beat the official SOTA by ≥0.005 nats at p < 0.01.
@@ -22,9 +22,9 @@ To land an accepted record, the submission must beat the official SOTA by ≥0.0
 
 ## Top 3 hypotheses
 
-1. The shortest accepted-record route now runs through a record-eligible backward-looking cache path (`#913`, `#888`, `#868` lineage), not further pure-neural tuning.
+1. The shortest accepted-record route now runs through the cache frontier (`#933`, `#868`, and related lineage), not further pure-neural tuning.
 2. The current control plane is good enough to support serious runs: watchdog, mirroring, and FlashAttention warm-start are no longer the main blockers.
-3. Aggressive full-rescore cache variants can win raw BPB but may face legality scrutiny; conservative score-first cache paths may maximize acceptance probability.
+3. Two-pass full-rescore cache variants are now the strongest live route, but they carry explicit legality scrutiny; conservative score-first cache paths may still maximize accepted-record probability.
 
 ## Stop/go rules
 

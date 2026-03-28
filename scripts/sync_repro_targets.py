@@ -36,6 +36,11 @@ TARGETS: dict[int, dict[str, Any]] = {
         "record_dir": "records/track_10min_16mb/2026-03-27_CacheIsAllYouNeed_622KB_0.0887",
         "files": ["README.md", "submission.json", "requirements.txt", "train_gpt.py", "ngram_cache.py"],
     },
+    933: {
+        "label": "cache933",
+        "record_dir": "records/track_10min_16mb/2026-03-27_CacheMoney_Full_6L256d",
+        "files": ["README.md", "submission.json", "train_gpt.py"],
+    },
 }
 
 

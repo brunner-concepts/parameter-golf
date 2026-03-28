@@ -1,10 +1,10 @@
 # Frontier State
 
-Last updated: 2026-03-27
+Last updated: 2026-03-28
 
 ## Official leaderboard
 
-Source: upstream [README](https://github.com/openai/parameter-golf/blob/main/README.md) and live tracker issue #140 as of March 27, 2026.
+Source: upstream [README](https://github.com/openai/parameter-golf/blob/main/README.md) and live tracker issue #140 as of March 28, 2026.
 
 | Rank | BPB | Author | Record / PR lineage |
 |------|-----|--------|---------------------|
@@ -14,12 +14,13 @@ Source: upstream [README](https://github.com/openai/parameter-golf/blob/main/REA
 
 ## Live record-eligible frontier
 
-Source: Issue #140 live commentary plus current PR heads on March 26-27, 2026.
+Source: Issue #140 live commentary plus current PR heads on March 27-28, 2026.
 
 | PR | BPB | Type | Description | Interpretation |
 |----|-----|------|-------------|----------------|
-| #913 | **0.0887** | Eval cache | Minimal 2-layer GPT + online n-gram / phrase cache with adaptive blending | **Current best record-eligible route; the cache does nearly all the work.** |
+| #933 | **0.0804** | Eval cache, aggressive | CacheMoney: two-pass full-rescore n-gram + phrase cache with leave-one-out and online alpha calibration | **Current best record-eligible route, but legality is explicitly under discussion.** |
 | #870 | **0.0935** | Eval cache, aggressive | Full-rescore n-gram cache over all tokens | Extremely strong, but explicitly more aggressive on legality because of full-cache rescore / self-inclusion. |
+| #913 | **0.0887** | Eval cache | Minimal 2-layer GPT + online n-gram / phrase cache with adaptive blending | Important lineage result, but now superseded by `#933`. |
 | #921 | **0.0939** | Eval cache | Order-13 full-rescore n-gram + 11L int6 GPTQ | Confirms the cache frontier is not a single one-off result. |
 | #888 | **0.0942** | Eval cache | Fast full-rescore n-gram | Strong record-eligible cache result; more evidence the cache regime is dominant. |
 | #907 | **0.0960** | Eval cache | Two-pass order-12 shared n-gram tables | Strong additional cache confirmation. |
@@ -33,23 +34,24 @@ Source: Issue #140 live commentary plus current PR heads on March 26-27, 2026.
 ## Strategic interpretation
 
 1. **The competition has structurally changed.**
-   In the live record-eligible frontier, the dominant technique is no longer neural architecture or legal TTT. It is backward-looking eval-time cache engineering. Issue #140 reports `0.0887` pending on March 26-27, roughly a full BPB below the official leaderboard.
+   In the live record-eligible frontier, the dominant technique is no longer neural architecture or legal TTT. It is eval-time cache engineering. Issue #140 on March 27 reports a new record-eligible leader at `0.0804` (`#933`), far below the official accepted leaderboard.
 
 2. **Pure-neural `#414` reproduction is no longer the shortest record path.**
    `#414` remains useful for control-plane confidence and as historical lineage for the accepted leaderboard, but it is now badly behind the live frontier. Running the full repro may still be useful as an engineering anchor; it is not the highest-EV route to an accepted record.
 
 3. **Legality risk moved from TTT ordering to cache interpretation.**
-   The important question is no longer only “score-first TTT or not.” It is also whether aggressive two-pass / full-rescore cache methods are interpreted as legal when later rescoring uses a cache built from all previously scored tokens. Conservative online cache paths therefore matter strategically, not just academically.
+   The important question is no longer only “score-first TTT or not.” It is also whether aggressive two-pass / full-rescore cache methods are interpreted as legal when later rescoring uses a cache built from all previously scored tokens. `#933` itself says this legality question is still active.
 
 4. **Artifact and eval engineering now dominate.**
-   `#913` claims `622 KB` artifact size, `122s` train time, and `403s` eval time. That means the artifact budget is no longer tight on the leading path; the real bottleneck is implementing a fast, legal cache mixer and packaging it cleanly.
+   `#933` claims `7.47 MB` artifact size, `339s` eval time, and massive headroom to the 16 MB cap. The real bottleneck is implementing a fast, legal cache mixer and packaging it cleanly, not squeezing neural weights.
 
 5. **Our own blocker has changed.**
    The FlashAttention warm-start gate succeeded on March 25, 2026 (`345.076s` bootstrap vs the prior `7709.693s`). Infrastructure is no longer the main excuse for delay. The remaining gap is strategic: the repo is still pointed at a lane that is no longer closest to a win.
 
 ## Reproduction notes
 
-- **#913**: Minimal integration path from the baseline. PR text claims only `36` added lines to `train_gpt.py` plus one new `ngram_cache.py`, `622 KB` artifact, `122s` train, and `403s` eval. This is the cleanest current reproduction target.
+- **#933**: Current record-eligible leader. Strongest raw target, but it explicitly says two-pass legality is still under discussion. Treat as the highest-upside but highest-scrutiny cache reproduction.
+- **#913**: Still valuable because it is a cleaner lineage step than `#933`. Use it as a code/idea source even if it is no longer the top live target.
 - **#870**: Stronger than `#868`, but explicitly flags its own full-rescore / self-inclusion aggressiveness. Treat as a powerful idea source, not the safest first submission path.
 - **#868**: Useful stepping stone because it is closer to a conservative legality interpretation while already clearing the official accepted record by a huge margin.
 - **#414**: Historical anchor only. If reproduced, use it to validate the control plane and lineage understanding, not as the main path to a win.
