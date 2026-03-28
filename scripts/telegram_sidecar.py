@@ -12,12 +12,18 @@ from pathlib import Path
 from typing import Any
 
 
-ACTIVE_RUN_STATUSES = {"running", "starting", "dry-run"}
+ACTIVE_RUN_STATUSES = {"launching", "running", "starting", "dry-run"}
 TERMINAL_RUN_STATUSES = {"complete", "failed", "dry-run-complete"}
 
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def isoformat_mtime(path: Path | None) -> str | None:
+    if not path or not path.exists():
+        return None
+    return datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -73,17 +79,40 @@ def all_run_dirs(live_root: Path) -> list[Path]:
 
 
 def run_snapshot(run_dir: Path) -> dict[str, Any]:
+    budget_state = read_json(run_dir.parent.parent / "control_plane/state/budget_state.json")
+    active_pods = {
+        str(pod.get("id")): pod
+        for pod in (budget_state.get("active_pods") or [])
+        if pod.get("id")
+    }
     current = read_json(run_dir / "current_state.json")
     terminal = read_json(run_dir / "terminal_result.json")
     launch = read_json(run_dir / "launch.json")
     summary = read_text(run_dir / "summary.md")
+    pod_id = launch.get("pod_id")
+    active_pod = active_pods.get(str(pod_id)) if pod_id else None
+    inferred_run_status = current.get("status")
+    if not inferred_run_status and launch and active_pod:
+        inferred_run_status = "launching"
+    inferred_phase_id = current.get("phase_id")
+    if not inferred_phase_id and inferred_run_status in ACTIVE_RUN_STATUSES:
+        inferred_phase_id = launch.get("launch_phase")
     return {
         "run_id": run_dir.name,
-        "run_status": current.get("status"),
+        "run_status": inferred_run_status,
         "terminal_status": terminal.get("status"),
-        "phase_id": current.get("phase_id"),
-        "updated_at": current.get("updated_at") or terminal.get("updated_at") or launch.get("launched_at"),
-        "pod_id": launch.get("pod_id"),
+        "phase_id": inferred_phase_id,
+        "updated_at": (
+            current.get("updated_at")
+            or terminal.get("updated_at")
+            or launch.get("launched_at")
+            or isoformat_mtime(run_dir / "current_state.json")
+            or isoformat_mtime(run_dir / "terminal_result.json")
+            or isoformat_mtime(run_dir / "launch.json")
+        ),
+        "pod_id": pod_id,
+        "pod_status": active_pod.get("desiredStatus") if active_pod else None,
+        "launch_phase": launch.get("launch_phase"),
         "summary": summary,
     }
 
@@ -116,6 +145,8 @@ def proactive_message(snapshot: dict[str, Any]) -> str:
     lines = ["Parameter Golf Update", f"Run: {snapshot['run_id']}"]
     if snapshot.get("pod_id"):
         lines.append(f"Pod: {short_pod_id(snapshot['pod_id'])}")
+    if snapshot.get("pod_status"):
+        lines.append(f"Pod status: {snapshot['pod_status']}")
     if snapshot.get("phase_id"):
         lines.append(f"Phase: {snapshot['phase_id']}")
     if snapshot.get("run_status"):
@@ -133,6 +164,8 @@ def proactive_message(snapshot: dict[str, Any]) -> str:
 def state_key(snapshot: dict[str, Any]) -> str:
     return json.dumps(
         {
+            "launch_phase": snapshot.get("launch_phase"),
+            "pod_status": snapshot.get("pod_status"),
             "run_status": snapshot.get("run_status"),
             "terminal_status": snapshot.get("terminal_status"),
             "phase_id": snapshot.get("phase_id"),
@@ -162,6 +195,7 @@ def build_live_context(root: Path, live_root: Path) -> str:
             "reserved_today_usd": budget_state.get("reserved_today_usd"),
             "daily_cap_usd": budget_state.get("daily_cap_usd"),
             "active_pod_count": budget_state.get("active_pod_count"),
+            "active_pods": (budget_state.get("active_pods") or [])[:3],
             "updated_at": budget_state.get("updated_at"),
         },
         "queue_state": {
@@ -178,6 +212,8 @@ def build_live_context(root: Path, live_root: Path) -> str:
             "terminal_status": snapshot.get("terminal_status") if snapshot else None,
             "phase_id": snapshot.get("phase_id") if snapshot else None,
             "pod_id": snapshot.get("pod_id") if snapshot else None,
+            "pod_status": snapshot.get("pod_status") if snapshot else None,
+            "launch_phase": snapshot.get("launch_phase") if snapshot else None,
             "updated_at": snapshot.get("updated_at") if snapshot else None,
             "summary_tail": trim(snapshot.get("summary") or "", 2500) if snapshot else "",
         },
@@ -192,6 +228,7 @@ def build_prompt(root: Path, live_root: Path, transcript: list[dict[str, str]], 
             "You are Parameter Golf Bot, a conversational gateway for a live autonomous research operator.",
             "Be natural, concise, and useful. Do not sound like a command parser.",
             "Use the live control-plane state below as truth.",
+            "If any earlier assistant statement conflicts with the live state, explicitly correct it and trust the live state.",
             "You are not the executor. Do not claim you performed actions unless the live state proves it.",
             "If the user asks for strategy or judgment, answer like a pragmatic operator/CEO.",
             "If the user asks to take an action, you may describe the recommended action, but do not claim it already happened.",
