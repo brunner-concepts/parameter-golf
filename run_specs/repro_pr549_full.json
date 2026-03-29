@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "run_id": "repro_pr549_full",
+  "hypothesis": "Reproduce the accepted PR #549 SOTA (1.1194 BPB) on 8x H100 SXM to establish a verified delta anchor for improvement experiments.",
+  "parent_branch": "repro/pr549",
+  "track": "neural",
+  "compute_tier": "8xH100-SXM",
+  "auto_promote": false,
+  "promotion_gate": "Full repro must land within +/-0.001 BPB of 1.1194 before any improvement experiments are allowed.",
+  "env": {
+    "REPO_URL": "https://github.com/brunner-concepts/parameter-golf.git",
+    "CHECKOUT_REF": "main",
+    "REPO_DIR": "/workspace/parameter-golf",
+    "VENV_DIR": "/workspace/pgolf-venv",
+    "FLASH_ATTN_ROOT": "/workspace/flash-attention",
+    "FLASH_ATTN_REF": "6362bd3bcad059aa15fd993c6a9d5d1ee8a11418",
+    "FLASH_ATTN_MODE": "auto",
+    "MAX_JOBS": "8",
+    "DATA_VARIANT": "sp1024",
+    "UPSTREAM_RECORD_DIR": "third_party/upstream_prs/pr549",
+    "RUN_ENTRYPOINT": "train_gpt.py"
+  },
+  "phases": [
+    {
+      "id": "bootstrap_env",
+      "description": "Prepare the repo, virtualenv, zstandard, and flash_attn_interface on the 8x pod.",
+      "command": "bash scripts/bootstrap_runpod_env.sh",
+      "cwd": "${REPO_DIR}",
+      "log_name": "bootstrap_env.log",
+      "failure_summary": "Fix the bootstrap path before retrying the full PR #549 reproduction."
+    },
+    {
+      "id": "prepare_data",
+      "description": "Download the full sp1024 dataset cache before the 8x reproduction.",
+      "command": "bash scripts/prepare_parameter_golf_data.sh",
+      "cwd": "${REPO_DIR}",
+      "log_name": "prepare_data.log",
+      "failure_summary": "Fix the data bootstrap issue before retrying the full PR #549 run."
+    },
+    {
+      "id": "run_full_repro",
+      "description": "Run the published PR #549 record path on 8 GPUs.",
+      "command": "bash scripts/run_upstream_record.sh",
+      "cwd": "${REPO_DIR}",
+      "log_name": "pr549_full.log",
+      "env": {
+        "RUN_ID": "pr549_full",
+        "NPROC_PER_NODE": "8"
+      },
+      "failure_summary": "Investigate the exact PR #549 repro failure before trying improvement experiments."
+    }
+  ],
+  "success_summary": "PR #549 full repro completed. Capture BPB, runtime, and artifact size in 09_RESULTS. This is the delta anchor for all improvement experiments.",
+  "manual_next_command": "Write 09_RESULTS/repro_pr549_full.md, then decide which improvement experiments to run."
+}

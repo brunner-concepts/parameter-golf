@@ -339,3 +339,23 @@ Treat the pinned-manifest `#868` rerun as milestone-resolving evidence, not as a
 2. Keep competition PR packaging blocked; the result is still not an understood reproduction.
 3. Update the grant narrative to reflect stronger evidence: the operator completed a frozen-surface parity rerun and narrowed the unresolved gap further.
 4. The next strategic choice is no longer 'rerun blindly.' It is either deeper hidden-surface forensics or a pivot to the next conservative cache lineage target with the now-proven operator stack.
+
+## 2026-03-29 — Cache purge forces full neural pivot
+
+**Decision:**
+Abandon all cache-based targets and pivot 100% to the pure neural frontier. Rewrite grant application, retarget operator, and sync new upstream reproduction targets.
+
+**Rationale:**
+- On March 27, organizer @valerio-oai closed 33+ PRs including all three of this project's tracked targets: #868 (closed — two-pass n-gram leaks eval tokens), #913 (closed — hashed n-gram caches don't normalize), and #933 (effectively dead — same technique family).
+- The community (led by @abaybektursun in PR #886) mathematically proved that hashed n-gram eval caches are invalid: the hash lookup is conditioned on the target token, producing an improperly normalized distribution. A bucket sweep showed the "improvement" tracks collision density, not prediction quality.
+- The organizer endorsed a formal validity criterion: at position `t`, the predictive distribution must depend only on the artifact and the strict prefix `x_1, ..., x_{t-1}`. Full normalization over the entire token alphabet required. No two-pass rescoring.
+- The competition has reset to the pure neural frontier. Official SOTA remains **1.1194 BPB** (PR #549). The strongest open legal submission is PR #1019 at **1.1147 BPB**.
+- The organizer is only reviewing PRs > #988.
+- This project's infrastructure is 97% technique-agnostic and can be retargeted to neural in 2-3 hours of spec changes.
+
+**Consequences:**
+1. Track allocation moves to 100% neural. No further cache work.
+2. New reproduction targets: PR #549 (accepted SOTA, reproduction anchor) and PR #1019 (likely next merge, improvement source).
+3. Grant application rewritten for post-purge neural narrative. Recommended tier: $500 development grant.
+4. All project memory files updated: executive brief, frontier state, operator state, spend campaign.
+5. The cache investigation was not wasted: it proved the infrastructure, demonstrated rigorous methodology, and independently identified the eval-surface divergence that the organizers later confirmed.

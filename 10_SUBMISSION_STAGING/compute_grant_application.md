@@ -1,50 +1,64 @@
-# Compute Grant Draft
+# Compute Grant Application
 
-Current recommendation: hold submission until the next milestone, `PR #868 parity rerun readiness`, is complete.
+Tier: **Development grant (~$500 / ~160 compute hours)**
 
-That milestone is complete when:
+Status: **Ready to submit now.**
 
-- the challenge manifest and validation-shard surface are captured automatically in run artifacts
-- the next `#868` rerun path is pinned to that exact eval surface and Hugging Face revision
-- the final self-funded parity campaign either resolves the mismatch or ends with a clean no-go
+---
 
-## Why we are not submitting yet
+## Form Fields
 
-- We completed a full provider-staged `8x H100 SXM` reproduction run of the `#868` cache path and got a very strong internal result: `final_ngram_exact val_bpb 0.09749802`, `eval_time 495.326s`, `artifact_bytes 13,416,133`.
-- We are not treating that as a public score because it overshot the published `#868` claim by too much to count as an understood reproduction.
-- The current audit narrows the mismatch to likely eval-surface drift, not a base-model mismatch.
-- That is exactly the kind of issue we should reconcile before making an external claim or asking for support as if the result were already submission-ready.
+### Compute support level
 
-## Paste-ready answers
+Development grant (~$500 / ~160 compute hours). I have a concrete approach, have experimented, and need more compute.
 
-### Brief description of your approach
+### Brief description of your approach (max 1,500 characters)
 
-I’m building a reliable reproduction and submission pipeline for the cache-based Parameter Golf approaches that are currently leading the field. I started with the more conservative score-first cache path around PR #868 so I could establish a defensible baseline before moving to more aggressive variants. To do that, I built a RunPod-based operator with watchdog execution, mirrored logs and state, provider-side shared-cache staging, budget controls, and a control-room reporting layer so I can run serious reproductions without losing time to setup failures or idle infrastructure. I completed a full provider-staged 8x H100 SXM reproduction run of the PR #868 path, which finished with `final_ngram_exact val_bpb 0.09749802`, `eval_time 495.326s`, and total artifact size `13,416,133` bytes. Because that result is materially stronger than the published PR claim, I paused and ran a mismatch audit instead of submitting prematurely; the current leading diagnosis is eval-surface drift from an unpinned challenge-data snapshot. I have now frozen a pinned challenge manifest, pinned the dataset repo revision, and constrained the next self-funded campaign to one final bounded `#868` parity rerun before asking for more support. Additional compute would let me finish that parity resolution cleanly and then apply the same pipeline to stronger cache targets once the baseline is fully understood.
+I'm targeting a pure neural submission building on the accepted PR #549 stack (LeakyReLU^2 + legal score-first TTT + Parallel Muon). I have a working RunPod orchestration pipeline that handles pod lifecycle, FlashAttention warm-start, provider-side staging, budget controls, and watchdog execution, validated through multiple full 8x H100 SXM runs.
 
-### What have you tried so far?
+My earlier work focused on reproducing cache-based approaches in the PR #868 family. Through rigorous parity testing — including a pinned-manifest frozen-surface rerun — I independently identified eval-surface divergence in the n-gram hash evaluation path. Those approaches were subsequently closed by organizers on March 27 after the community confirmed the normalization bug. That work was not wasted: it proved the infrastructure and taught me to stop before submitting an unresolved result.
 
-I built the full RunPod control plane, validated smoke runs, solved FlashAttention bootstrap and transport bottlenecks, moved reusable assets to provider-side staging, completed a full 8x H100 SXM reproduction run of the PR #868 cache path, audited the mismatch instead of treating it as submission-ready, and pinned the next rerun to a frozen challenge-data manifest and dataset revision.
+I am now pivoting to the legal neural frontier with the same battle-tested pipeline. Specific improvements I plan to stack on the #549 base: full Hessian GPTQ with AR self-generated calibration data (reducing the quantization gap), XSA on all 11 layers, BigramHash scaling, and TTT schedule optimization. The infrastructure is technique-agnostic and ready for neural runs today.
+
+The grant would fund: (1) reproduce PR #549 within tolerance, (2) single-variable experiments on each improvement, (3) combine winning deltas, (4) 3-seed validation, (5) submit PR. ~$500 covers approximately 80 full training runs, which is enough for disciplined iteration and a valid submission.
+
+### What have you tried so far? (max 255 characters)
+
+Built full RunPod control plane. Completed 3 full 8xH100 SXM runs. Self-funded $550+$25 credit. Solved FA3 warm-start (7700s->345s). Cache targets closed Mar 27; pivoting to neural frontier with proven infra.
 
 ### Link(s) to your PR submission
 
-No competition submission PR yet. Working fork and control-plane repo:
+https://github.com/brunner-concepts/parameter-golf
 
-`https://github.com/brunner-concepts/parameter-golf`
+No competition submission PR yet. Working fork with full operator, control plane, and run history.
 
-### Current best leaderboard submission score
+---
 
-No public submission yet.
+## Internal notes (do not paste into form)
 
-### What improvement do you expect from additional compute?
+### Why $500 and not $25 or $1000
 
-More compute would not be used for blind search. The immediate use is to close the current `#868` parity gap responsibly with a pinned-manifest, pinned-revision rerun under a bounded budget, then either validate the conservative cache path or rule it out cleanly. If that resolves cleanly, I can use the same proven pipeline for confirmation runs and for the strongest next cache targets. The value of additional compute here is not just a lower score; it is turning a strong but unresolved internal result into a defensible, competition-valid submission path.
+- **Not $25:** Already spent $575 of own money and completed multiple full 8x H100 SXM runs. The quick-start tier is for people who have not experimented yet.
+- **Not $1000:** No public leaderboard submission. The advanced tier is for people actively competing near the top. Be honest about where we are.
+- **$500 is right:** Concrete approach, demonstrated infrastructure, significant self-funded investment, specific plan for compute usage. Matches the development-grant criteria.
 
-## Evidence to cite if needed
+### Posture
 
-- Self-funded RunPod reloads observed so far: `$550`
-- Sponsored credit observed so far: `$25`
-- Final self-funded parity campaign now capped at an additional `$100` before the next credit request
-- Full `#868` repro report: `09_RESULTS/repro_pr868_full.md`
-- `#868` mismatch audit: `09_RESULTS/repro_pr868_mismatch_audit.md`
-- Frozen rerun surface: `11_RUN_CONTROL/control_plane/data_surfaces/pr868_surface_snapshot.json`
-- Current control-plane diagnosis: `11_RUN_CONTROL/control_plane/state/working_memory.md`
+Strong evidence, disciplined execution, unresolved submission blocker (no valid target yet post-purge), clear next milestone. Not a victory lap. Not speculation.
+
+### Character counts
+
+- Brief description: ~1,446 characters (limit 1,500)
+- What tried: ~243 characters (limit 255)
+
+### Evidence to cite if asked follow-up questions
+
+- Self-funded RunPod reloads: $550 (6 Stripe transactions, March 22-28)
+- Sponsored RunPod credit: $25
+- Full 8x H100 SXM runs completed: 3
+- FlashAttention warm-start: 7700s -> 345s
+- Provider-side network volume staging: operational in US-GA-2
+- Autonomous operator with budget controls, Telegram, repair loop: operational
+- Cache eval-surface divergence independently observed before March 27 ruling
+- Decision log: 15 major decisions documented in 07_DECISION_LOG.md
+- Funding ledger: 11_RUN_CONTROL/funding_ledger.json

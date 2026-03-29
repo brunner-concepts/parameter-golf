@@ -21,34 +21,35 @@ TARGETS: dict[int, dict[str, Any]] = {
         "record_dir": "records/track_10min_16mb/2026-03-22_11L_EMA_GPTQ-lite_warmdown3500_QAT015_1.1233",
         "files": ["README.md", "submission.json", "train_gpt.py"],
     },
-    505: {
-        "label": "gepa505",
-        "record_dir": "records/track_10min_16mb/2026-03-23_JoeProAI_SwiGLU_VE128_NoTTT",
-        "files": ["README.md", "train_gpt.py"],
-    },
-    868: {
-        "label": "ngram868",
-        "record_dir": "records/track_10min_16mb/2026-03-26_Budgeted_TwoPass_Ngram_8xH100",
+    549: {
+        "label": "leaky_ttt549",
+        "record_dir": "records/track_10min_16mb/2026-03-23_LeakyReLU_LegalTTT_ParallelMuon",
         "files": [
             "README.md",
             "submission.json",
-            "requirements.txt",
             "train_gpt.py",
             "train_seed1337.log",
             "train_seed42.log",
             "train_seed2025.log",
         ],
     },
-    913: {
-        "label": "cache913",
-        "record_dir": "records/track_10min_16mb/2026-03-27_CacheIsAllYouNeed_622KB_0.0887",
-        "files": ["README.md", "submission.json", "requirements.txt", "train_gpt.py", "ngram_cache.py"],
+    1019: {
+        "label": "gptq_xsa1019",
+        "record_dir": "records/track_10min_16mb/2026-03-25_ValCalib_GPTQ_XSA_BigramHash3072",
+        "files": [
+            "README.md",
+            "requirements.txt",
+            "submission.json",
+            "train_gpt.py",
+            "train_seed314.log",
+            "train_seed42.log",
+            "train_seed999.log",
+        ],
     },
-    933: {
-        "label": "cache933",
-        "record_dir": "records/track_10min_16mb/2026-03-27_CacheMoney_Full_6L256d",
-        "files": ["README.md", "submission.json", "train_gpt.py"],
-    },
+    # --- closed cache targets (kept for historical reference, not synced by default) ---
+    # 868: closed March 27 — two-pass n-gram leaks eval tokens
+    # 913: closed March 27 — hashed n-gram caches don't normalize
+    # 933: effectively dead — same technique family
 }
 
 

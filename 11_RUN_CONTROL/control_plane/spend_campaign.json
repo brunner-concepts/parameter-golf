@@ -1,20 +1,32 @@
 {
   "schema_version": 1,
-  "id": "pr868_final_self_funded_parity_campaign",
+  "id": "neural_frontier_campaign",
   "enabled": true,
-  "target_pr": 868,
-  "goal": "Use one final self-funded envelope to resolve the PR #868 parity question before requesting more credits.",
-  "activation_time": "2026-03-28T20:57:19Z",
-  "max_additional_spend_usd": 100.0,
-  "baseline_client_balance_usd": 128.5292780129,
+  "target_pr": 549,
+  "goal": "Reproduce the accepted PR #549 neural stack, stack legal improvements, 3-seed validate, and submit as PR > #988.",
+  "activation_time": "2026-03-29T00:00:00Z",
+  "max_additional_spend_usd": 92.0,
+  "baseline_client_balance_usd": 117.05,
+  "reserve_floor_usd": 25.0,
   "allowed_run_ids": [
-    "repro_pr868_parity_full"
+    "repro_pr549_smoke",
+    "repro_pr549_full",
+    "repro_pr1019_full",
+    "neural_frontier_experiment",
+    "neural_frontier_3seed"
   ],
-  "stop_after_milestone_resolution": true,
+  "stop_after_milestone_resolution": false,
   "allow_inflight_completion": true,
+  "previous_campaign": {
+    "id": "pr868_final_self_funded_parity_campaign",
+    "outcome": "resolved_persistent_divergence",
+    "additional_spend_used_usd": 11.48,
+    "terminated_reason": "All cache targets closed by organizer on March 27"
+  },
   "notes": [
-    "The campaign was activated immediately after explicit approval to spend the final self-funded envelope now rather than waiting for the next UTC billing window.",
-    "The only approved auto-launch under this envelope is the pinned-manifest PR #868 parity rerun.",
-    "Once the parity milestone resolves, stop new compute and move to the grant request or PR decision."
+    "Replaces the dead pr868 parity campaign after the March 27 cache purge.",
+    "Budget is current balance ($117) minus reserve floor ($25) = $92 usable.",
+    "If a $500 development grant is approved, the max_additional_spend will increase.",
+    "Priority order: (1) reproduce #549, (2) single-variable experiments, (3) combine + 3-seed, (4) submit PR."
   ]
 }

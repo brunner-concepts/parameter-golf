@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "run_id": "repro_pr549_smoke",
+  "hypothesis": "Validate the accepted PR #549 neural stack (LeakyReLU^2 + legal TTT + Parallel Muon) on 1x H100 before spending on the full 8x reproduction.",
+  "parent_branch": "repro/pr549",
+  "track": "neural",
+  "compute_tier": "1xH100-smoke",
+  "auto_promote": false,
+  "promotion_gate": "Smoke must complete cleanly before the daemon may spend on the full 8x H100 SXM PR #549 reproduction.",
+  "env": {
+    "REPO_URL": "https://github.com/brunner-concepts/parameter-golf.git",
+    "CHECKOUT_REF": "main",
+    "REPO_DIR": "/workspace/parameter-golf",
+    "VENV_DIR": "/workspace/pgolf-venv",
+    "FLASH_ATTN_ROOT": "/workspace/flash-attention",
+    "FLASH_ATTN_REF": "6362bd3bcad059aa15fd993c6a9d5d1ee8a11418",
+    "FLASH_ATTN_MODE": "auto",
+    "MAX_JOBS": "8",
+    "DATA_VARIANT": "sp1024",
+    "UPSTREAM_RECORD_DIR": "third_party/upstream_prs/pr549",
+    "RUN_ENTRYPOINT": "train_gpt.py"
+  },
+  "phases": [
+    {
+      "id": "bootstrap_env",
+      "description": "Prepare the repo, virtualenv, zstandard, and flash_attn_interface.",
+      "command": "bash scripts/bootstrap_runpod_env.sh",
+      "cwd": "${REPO_DIR}",
+      "log_name": "bootstrap_env.log",
+      "failure_summary": "Fix bootstrap before attempting the PR #549 smoke run."
+    },
+    {
+      "id": "prepare_data",
+      "description": "Download one training shard for a cheap smoke validation.",
+      "command": "bash scripts/prepare_parameter_golf_data.sh",
+      "cwd": "${REPO_DIR}",
+      "log_name": "prepare_data.log",
+      "env": {
+        "TRAIN_SHARDS": "1"
+      },
+      "failure_summary": "Fix the data path before retrying the PR #549 smoke run."
+    },
+    {
+      "id": "run_smoke",
+      "description": "Run the upstream PR #549 train_gpt.py on 1 GPU with a short wallclock budget.",
+      "command": "bash scripts/run_upstream_record.sh",
+      "cwd": "${REPO_DIR}",
+      "log_name": "pr549_smoke.log",
+      "env": {
+        "RUN_ID": "pr549_smoke",
+        "NPROC_PER_NODE": "1",
+        "MAX_WALLCLOCK_SECONDS": "120"
+      },
+      "failure_summary": "Fix the smoke failure before allowing the full 8x PR #549 reproduction."
+    }
+  ],
+  "success_summary": "PR #549 smoke completed. Review infrastructure health before allowing the full 8x run.",
+  "manual_next_command": "Launch repro_pr549_full if smoke is clean."
+}

@@ -393,403 +393,24 @@
       "updated_at": "2026-03-23T17:26:08Z"
     },
     {
-      "changed_files_total": 5,
+      "changed_files_total": 6,
       "changed_record_files": [
-        "records/track_10min_16mb/2026-03-23_JoeProAI_SwiGLU_VE128_NoTTT/README.md",
-        "records/track_10min_16mb/2026-03-23_JoeProAI_SwiGLU_VE128_NoTTT/train_gpt.py"
+        "records/track_10min_16mb/2026-03-23_LeakyReLU_LegalTTT_ParallelMuon/README.md",
+        "records/track_10min_16mb/2026-03-23_LeakyReLU_LegalTTT_ParallelMuon/submission.json",
+        "records/track_10min_16mb/2026-03-23_LeakyReLU_LegalTTT_ParallelMuon/train_gpt.py",
+        "records/track_10min_16mb/2026-03-23_LeakyReLU_LegalTTT_ParallelMuon/train_seed1337.log",
+        "records/track_10min_16mb/2026-03-23_LeakyReLU_LegalTTT_ParallelMuon/train_seed2025.log",
+        "records/track_10min_16mb/2026-03-23_LeakyReLU_LegalTTT_ParallelMuon/train_seed42.log"
       ],
       "claimed_bpb": {
         "source": "pr_title",
-        "value": 1.1181
+        "value": 1.1194
       },
-      "commit_count": 2,
-      "created_at": "2026-03-23T05:10:22Z",
-      "downloaded_files": [
-        "README.md",
-        "train_gpt.py"
-      ],
-      "eval_modes": {
-        "gptq": true,
-        "sliding_window": true,
-        "ttt_eval": false
-      },
-      "head_ref": "joeproai/swiglu-ve128-nottt-1.1181",
-      "head_sha": "340a3a44a2dbe412d7f866930ad53b36665d2e41",
-      "html_url": "https://github.com/openai/parameter-golf/pull/505",
-      "hyperparameters": [
-        {
-          "default": "\"./data/datasets/fineweb10B_sp1024\"",
-          "env": "DATA_PATH",
-          "line": 38,
-          "name": "data_path"
-        },
-        {
-          "default": "\"./data/tokenizers/fineweb_1024_bpe.model\"",
-          "env": "TOKENIZER_PATH",
-          "line": 41,
-          "name": "tokenizer_path"
-        },
-        {
-          "default": "str(uuid.uuid4())",
-          "env": "RUN_ID",
-          "line": 42,
-          "name": "run_id"
-        },
-        {
-          "default": "42",
-          "env": "SEED",
-          "line": 43,
-          "name": "seed"
-        },
-        {
-          "default": "524_288",
-          "env": "VAL_BATCH_SIZE",
-          "line": 45,
-          "name": "val_batch_size"
-        },
-        {
-          "default": "1000",
-          "env": "VAL_LOSS_EVERY",
-          "line": 46,
-          "name": "val_loss_every"
-        },
-        {
-          "default": "200",
-          "env": "TRAIN_LOG_EVERY",
-          "line": 47,
-          "name": "train_log_every"
-        },
-        {
-          "default": "20000",
-          "env": "ITERATIONS",
-          "line": 49,
-          "name": "iterations"
-        },
-        {
-          "default": "\"3500\"",
-          "env": "WARMDOWN_ITERS",
-          "line": 50,
-          "name": "warmdown_iters"
-        },
-        {
-          "default": "20",
-          "env": "WARMUP_STEPS",
-          "line": 51,
-          "name": "warmup_steps"
-        },
-        {
-          "default": "786_432",
-          "env": "TRAIN_BATCH_TOKENS",
-          "line": 52,
-          "name": "train_batch_tokens"
-        },
-        {
-          "default": "2048",
-          "env": "TRAIN_SEQ_LEN",
-          "line": 53,
-          "name": "train_seq_len"
-        },
-        {
-          "default": "600.0",
-          "env": "MAX_WALLCLOCK_SECONDS",
-          "line": 54,
-          "name": "max_wallclock_seconds"
-        },
-        {
-          "default": "1.5",
-          "env": "QK_GAIN_INIT",
-          "line": 55,
-          "name": "qk_gain_init"
-        },
-        {
-          "default": "1024",
-          "env": "VOCAB_SIZE",
-          "line": 57,
-          "name": "vocab_size"
-        },
-        {
-          "default": "\"11\"",
-          "env": "NUM_LAYERS",
-          "line": 58,
-          "name": "num_layers"
-        },
-        {
-          "default": "\"8\"",
-          "env": "NUM_KV_HEADS",
-          "line": 59,
-          "name": "num_kv_heads"
-        },
-        {
-          "default": "512",
-          "env": "MODEL_DIM",
-          "line": 60,
-          "name": "model_dim"
-        },
-        {
-          "default": "8",
-          "env": "NUM_HEADS",
-          "line": 61,
-          "name": "num_heads"
-        },
-        {
-          "default": "3",
-          "env": "MLP_MULT",
-          "line": 62,
-          "name": "mlp_mult"
-        },
-        {
-          "default": "\"1792\"",
-          "env": "MLP_HIDDEN",
-          "line": 63,
-          "name": "mlp_hidden"
-        },
-        {
-          "default": "\"1\"",
-          "env": "TIE_EMBEDDINGS",
-          "line": 64,
-          "name": "tie_embeddings"
-        },
-        {
-          "default": "64",
-          "env": "EVAL_STRIDE",
-          "line": 65,
-          "name": "eval_stride"
-        },
-        {
-          "default": "32",
-          "env": "EVAL_BATCH_SEQS",
-          "line": 66,
-          "name": "eval_batch_seqs"
-        },
-        {
-          "default": "10000.0",
-          "env": "ROPE_BASE",
-          "line": 67,
-          "name": "rope_base"
-        },
-        {
-          "default": "30.0",
-          "env": "LOGIT_SOFTCAP",
-          "line": 68,
-          "name": "logit_softcap"
-        },
-        {
-          "default": "\"8192\"",
-          "env": "BIGRAM_BUCKETS",
-          "line": 71,
-          "name": "bigram_buckets"
-        },
-        {
-          "default": "128",
-          "env": "BIGRAM_EMBED_DIM",
-          "line": 72,
-          "name": "bigram_embed_dim"
-        },
-        {
-          "default": "16",
-          "env": "ROPE_DIMS",
-          "line": 75,
-          "name": "rope_dims"
-        },
-        {
-          "default": "\"1\"",
-          "env": "LN_SCALE",
-          "line": 78,
-          "name": "ln_scale"
-        },
-        {
-          "default": "0.6",
-          "env": "EMBED_LR",
-          "line": 81,
-          "name": "embed_lr"
-        },
-        {
-          "default": "0.008",
-          "env": "HEAD_LR",
-          "line": 82,
-          "name": "head_lr"
-        },
-        {
-          "default": "0.035",
-          "env": "TIED_EMBED_LR",
-          "line": 83,
-          "name": "tied_embed_lr"
-        },
-        {
-          "default": "0.005",
-          "env": "TIED_EMBED_INIT_STD",
-          "line": 84,
-          "name": "tied_embed_init_std"
-        },
-        {
-          "default": "0.025",
-          "env": "MATRIX_LR",
-          "line": 85,
-          "name": "matrix_lr"
-        },
-        {
-          "default": "0.025",
-          "env": "SCALAR_LR",
-          "line": 86,
-          "name": "scalar_lr"
-        },
-        {
-          "default": "2.0",
-          "env": "DECODER_LR_MULT",
-          "line": 87,
-          "name": "decoder_lr_mult"
-        },
-        {
-          "default": "0.99",
-          "env": "MUON_MOMENTUM",
-          "line": 88,
-          "name": "muon_momentum"
-        },
-        {
-          "default": "5",
-          "env": "MUON_BACKEND_STEPS",
-          "line": 89,
-          "name": "muon_backend_steps"
-        },
-        {
-          "default": "0.92",
-          "env": "MUON_MOMENTUM_WARMUP_START",
-          "line": 90,
-          "name": "muon_momentum_warmup_start"
-        },
-        {
-          "default": "1500",
-          "env": "MUON_MOMENTUM_WARMUP_STEPS",
-          "line": 91,
-          "name": "muon_momentum_warmup_steps"
-        },
-        {
-          "default": "0.04",
-          "env": "MUON_WD",
-          "line": 92,
-          "name": "muon_wd"
-        },
-        {
-          "default": "0.04",
-          "env": "ADAM_WD",
-          "line": 93,
-          "name": "adam_wd"
-        },
-        {
-          "default": "0.9",
-          "env": "BETA1",
-          "line": 94,
-          "name": "beta1"
-        },
-        {
-          "default": "0.95",
-          "env": "BETA2",
-          "line": 95,
-          "name": "beta2"
-        },
-        {
-          "default": "1e-8",
-          "env": "ADAM_EPS",
-          "line": 96,
-          "name": "adam_eps"
-        },
-        {
-          "default": "0.0",
-          "env": "GRAD_CLIP_NORM",
-          "line": 97,
-          "name": "grad_clip_norm"
-        },
-        {
-          "default": "\"1\"",
-          "env": "EMA_ENABLED",
-          "line": 100,
-          "name": "ema_enabled"
-        },
-        {
-          "default": "\"0.997\"",
-          "env": "EMA_DECAY",
-          "line": 101,
-          "name": "ema_decay"
-        },
-        {
-          "default": "0.5",
-          "env": "SWA_START_FRAC",
-          "line": 104,
-          "name": "swa_start_frac"
-        },
-        {
-          "default": "50",
-          "env": "SWA_EVERY",
-          "line": 105,
-          "name": "swa_every"
-        },
-        {
-          "default": "\"1\"",
-          "env": "LATE_QAT",
-          "line": 108,
-          "name": "late_qat"
-        },
-        {
-          "default": "\"0.15\"",
-          "env": "QAT_THRESHOLD",
-          "line": 109,
-          "name": "qat_threshold"
-        },
-        {
-          "default": "\"1\"",
-          "env": "VE_ENABLED",
-          "line": 112,
-          "name": "ve_enabled"
-        },
-        {
-          "default": "128",
-          "env": "VE_DIM",
-          "line": 113,
-          "name": "ve_dim"
-        },
-        {
-          "default": "\"9,10\"",
-          "env": "VE_LAYERS",
-          "line": 114,
-          "name": "ve_layers"
-        },
-        {
-          "default": "\"4\"",
-          "env": "XSA_LAYERS",
-          "line": 117,
-          "name": "xsa_layers"
-        }
-      ],
-      "label": "gepa505",
-      "pr": 505,
-      "record_dir": "records/track_10min_16mb/2026-03-23_JoeProAI_SwiGLU_VE128_NoTTT",
-      "state": "closed",
-      "submission": null,
-      "title": "Record: SwiGLU+VE128+NoTTT val_bpb=1.1181 (3-seed mean)",
-      "updated_at": "2026-03-26T15:58:56Z"
-    },
-    {
-      "changed_files_total": 8,
-      "changed_record_files": [
-        "records/track_10min_16mb/2026-03-26_Budgeted_TwoPass_Ngram_8xH100/README.md",
-        "records/track_10min_16mb/2026-03-26_Budgeted_TwoPass_Ngram_8xH100/final_model.research_export.pt",
-        "records/track_10min_16mb/2026-03-26_Budgeted_TwoPass_Ngram_8xH100/requirements.txt",
-        "records/track_10min_16mb/2026-03-26_Budgeted_TwoPass_Ngram_8xH100/submission.json",
-        "records/track_10min_16mb/2026-03-26_Budgeted_TwoPass_Ngram_8xH100/train_gpt.py",
-        "records/track_10min_16mb/2026-03-26_Budgeted_TwoPass_Ngram_8xH100/train_seed1337.log",
-        "records/track_10min_16mb/2026-03-26_Budgeted_TwoPass_Ngram_8xH100/train_seed2025.log",
-        "records/track_10min_16mb/2026-03-26_Budgeted_TwoPass_Ngram_8xH100/train_seed42.log"
-      ],
-      "claimed_bpb": {
-        "source": "pr_title",
-        "value": 0.11814796
-      },
-      "commit_count": 2,
-      "created_at": "2026-03-26T16:45:38Z",
+      "commit_count": 3,
+      "created_at": "2026-03-23T16:08:26Z",
       "downloaded_files": [
         "README.md",
         "submission.json",
-        "requirements.txt",
         "train_gpt.py",
         "train_seed1337.log",
         "train_seed42.log",
@@ -797,930 +418,940 @@
       ],
       "eval_modes": {
         "gptq": true,
-        "sliding_window": false,
-        "ttt_eval": false
-      },
-      "head_ref": "submission-8x-autoresearch-ngram-budgeted",
-      "head_sha": "4ef9abf6631f13d9781d1fb91b3444dd4e2d63cc",
-      "html_url": "https://github.com/openai/parameter-golf/pull/868",
-      "hyperparameters": [],
-      "label": "ngram868",
-      "pr": 868,
-      "record_dir": "records/track_10min_16mb/2026-03-26_Budgeted_TwoPass_Ngram_8xH100",
-      "state": "closed",
-      "submission": {
-        "artifact_bytes_max": 13436213,
-        "author": "Aamod Bhatt",
-        "blurb": "11L frontier_lean stack with legal score-first N-gram eval. Adds a budgeted two-pass tuner that auto-caps early-chunk rescoring to fit eval wallclock while preserving large pass1->pass2 gain. 3-seed mean val_bpb 0.118148 (seeds: 1337,42,2025).",
-        "date": "2026-03-26",
-        "eval_time_seconds_max": 468.68,
-        "github_id": "aamodbhatt",
-        "name": "Budgeted Two-Pass N-gram Backoff (3-seed)",
-        "seed_results": {
-          "1337": {
-            "bytes_total": 13422021,
-            "eval_s": 446.935,
-            "train_s": 600.088,
-            "val_bpb": 0.11819909
-          },
-          "2025": {
-            "bytes_total": 13430005,
-            "eval_s": 446.318,
-            "train_s": 600.067,
-            "val_bpb": 0.11811002
-          },
-          "42": {
-            "bytes_total": 13436213,
-            "eval_s": 468.68,
-            "train_s": 600.013,
-            "val_bpb": 0.11813478
-          }
-        },
-        "seeds": [
-          1337,
-          42,
-          2025
-        ],
-        "track": "track_10min_16mb",
-        "train_time_seconds_max": 600.088,
-        "val_bpb": 0.11814796,
-        "val_bpb_std": 3.754e-05
-      },
-      "title": "Record: Budgeted Two-Pass N-gram Backoff \u2014 val_bpb 0.11814796 (3-seed mean)",
-      "updated_at": "2026-03-27T22:35:45Z"
-    },
-    {
-      "changed_files_total": 8,
-      "changed_record_files": [
-        "records/track_10min_16mb/2026-03-27_CacheIsAllYouNeed_622KB_0.0887/README.md",
-        "records/track_10min_16mb/2026-03-27_CacheIsAllYouNeed_622KB_0.0887/log_seed1337.txt",
-        "records/track_10min_16mb/2026-03-27_CacheIsAllYouNeed_622KB_0.0887/log_seed42.txt",
-        "records/track_10min_16mb/2026-03-27_CacheIsAllYouNeed_622KB_0.0887/log_seed7.txt",
-        "records/track_10min_16mb/2026-03-27_CacheIsAllYouNeed_622KB_0.0887/ngram_cache.py",
-        "records/track_10min_16mb/2026-03-27_CacheIsAllYouNeed_622KB_0.0887/requirements.txt",
-        "records/track_10min_16mb/2026-03-27_CacheIsAllYouNeed_622KB_0.0887/submission.json",
-        "records/track_10min_16mb/2026-03-27_CacheIsAllYouNeed_622KB_0.0887/train_gpt.py"
-      ],
-      "claimed_bpb": {
-        "source": "pr_title",
-        "value": 0.0887
-      },
-      "commit_count": 1,
-      "created_at": "2026-03-27T00:12:28Z",
-      "downloaded_files": [
-        "README.md",
-        "submission.json",
-        "requirements.txt",
-        "train_gpt.py",
-        "ngram_cache.py"
-      ],
-      "eval_modes": {
-        "gptq": false,
-        "sliding_window": false,
-        "ttt_eval": false
-      },
-      "head_ref": "submission/2026-03-27-cache-is-all-you-need",
-      "head_sha": "64c9d07a00e618ebd4f74ee9b2e2d6f2a7ef4f58",
-      "html_url": "https://github.com/openai/parameter-golf/pull/913",
-      "hyperparameters": [
-        {
-          "default": "\"./data/datasets/fineweb10B_sp1024\"",
-          "env": "DATA_PATH",
-          "line": 43,
-          "name": "data_path"
-        },
-        {
-          "default": "\"./data/tokenizers/fineweb_1024_bpe.model\"",
-          "env": "TOKENIZER_PATH",
-          "line": 46,
-          "name": "tokenizer_path"
-        },
-        {
-          "default": "str(uuid.uuid4())",
-          "env": "RUN_ID",
-          "line": 47,
-          "name": "run_id"
-        },
-        {
-          "default": "1337",
-          "env": "SEED",
-          "line": 48,
-          "name": "seed"
-        },
-        {
-          "default": "524_288",
-          "env": "VAL_BATCH_SIZE",
-          "line": 51,
-          "name": "val_batch_size"
-        },
-        {
-          "default": "1000",
-          "env": "VAL_LOSS_EVERY",
-          "line": 52,
-          "name": "val_loss_every"
-        },
-        {
-          "default": "200",
-          "env": "TRAIN_LOG_EVERY",
-          "line": 53,
-          "name": "train_log_every"
-        },
-        {
-          "default": "20000",
-          "env": "ITERATIONS",
-          "line": 56,
-          "name": "iterations"
-        },
-        {
-          "default": "1200",
-          "env": "WARMDOWN_ITERS",
-          "line": 57,
-          "name": "warmdown_iters"
-        },
-        {
-          "default": "20",
-          "env": "WARMUP_STEPS",
-          "line": 58,
-          "name": "warmup_steps"
-        },
-        {
-          "default": "524_288",
-          "env": "TRAIN_BATCH_TOKENS",
-          "line": 59,
-          "name": "train_batch_tokens"
-        },
-        {
-          "default": "1024",
-          "env": "TRAIN_SEQ_LEN",
-          "line": 60,
-          "name": "train_seq_len"
-        },
-        {
-          "default": "600.0",
-          "env": "MAX_WALLCLOCK_SECONDS",
-          "line": 61,
-          "name": "max_wallclock_seconds"
-        },
-        {
-          "default": "1.5",
-          "env": "QK_GAIN_INIT",
-          "line": 62,
-          "name": "qk_gain_init"
-        },
-        {
-          "default": "1024",
-          "env": "VOCAB_SIZE",
-          "line": 65,
-          "name": "vocab_size"
-        },
-        {
-          "default": "9",
-          "env": "NUM_LAYERS",
-          "line": 66,
-          "name": "num_layers"
-        },
-        {
-          "default": "4",
-          "env": "NUM_KV_HEADS",
-          "line": 67,
-          "name": "num_kv_heads"
-        },
-        {
-          "default": "512",
-          "env": "MODEL_DIM",
-          "line": 68,
-          "name": "model_dim"
-        },
-        {
-          "default": "8",
-          "env": "NUM_HEADS",
-          "line": 69,
-          "name": "num_heads"
-        },
-        {
-          "default": "2",
-          "env": "MLP_MULT",
-          "line": 70,
-          "name": "mlp_mult"
-        },
-        {
-          "default": "\"1\"",
-          "env": "TIE_EMBEDDINGS",
-          "line": 71,
-          "name": "tie_embeddings"
-        },
-        {
-          "default": "10000.0",
-          "env": "ROPE_BASE",
-          "line": 72,
-          "name": "rope_base"
-        },
-        {
-          "default": "30.0",
-          "env": "LOGIT_SOFTCAP",
-          "line": 73,
-          "name": "logit_softcap"
-        },
-        {
-          "default": "0.6",
-          "env": "EMBED_LR",
-          "line": 76,
-          "name": "embed_lr"
-        },
-        {
-          "default": "0.008",
-          "env": "HEAD_LR",
-          "line": 77,
-          "name": "head_lr"
-        },
-        {
-          "default": "0.05",
-          "env": "TIED_EMBED_LR",
-          "line": 78,
-          "name": "tied_embed_lr"
-        },
-        {
-          "default": "0.005",
-          "env": "TIED_EMBED_INIT_STD",
-          "line": 79,
-          "name": "tied_embed_init_std"
-        },
-        {
-          "default": "0.04",
-          "env": "MATRIX_LR",
-          "line": 80,
-          "name": "matrix_lr"
-        },
-        {
-          "default": "0.04",
-          "env": "SCALAR_LR",
-          "line": 81,
-          "name": "scalar_lr"
-        },
-        {
-          "default": "0.95",
-          "env": "MUON_MOMENTUM",
-          "line": 82,
-          "name": "muon_momentum"
-        },
-        {
-          "default": "5",
-          "env": "MUON_BACKEND_STEPS",
-          "line": 83,
-          "name": "muon_backend_steps"
-        },
-        {
-          "default": "0.85",
-          "env": "MUON_MOMENTUM_WARMUP_START",
-          "line": 84,
-          "name": "muon_momentum_warmup_start"
-        },
-        {
-          "default": "500",
-          "env": "MUON_MOMENTUM_WARMUP_STEPS",
-          "line": 85,
-          "name": "muon_momentum_warmup_steps"
-        },
-        {
-          "default": "0.9",
-          "env": "BETA1",
-          "line": 86,
-          "name": "beta1"
-        },
-        {
-          "default": "0.95",
-          "env": "BETA2",
-          "line": 87,
-          "name": "beta2"
-        },
-        {
-          "default": "1e-8",
-          "env": "ADAM_EPS",
-          "line": 88,
-          "name": "adam_eps"
-        },
-        {
-          "default": "0.0",
-          "env": "GRAD_CLIP_NORM",
-          "line": 89,
-          "name": "grad_clip_norm"
-        }
-      ],
-      "label": "cache913",
-      "pr": 913,
-      "record_dir": "records/track_10min_16mb/2026-03-27_CacheIsAllYouNeed_622KB_0.0887",
-      "state": "closed",
-      "submission": {
-        "author": "royi",
-        "code_bytes": 63357,
-        "date": "2026-03-27",
-        "github": "RoyiRa",
-        "mean_val_bpb": 0.08872228,
-        "mean_val_loss": 0.14980366,
-        "name": "Cache Is All You Need: 622KB artifact, 0.0887 BPB",
-        "note": "Competition baseline train_gpt.py (1126 lines) + ngram_cache.py (295 lines). 2L 128d vanilla GPT. 96% of 16MB budget unused.",
-        "seed_results": {
-          "1337": {
-            "artifact_bytes": 621760,
-            "val_bpb": 0.08833078,
-            "val_loss": 0.14914263
-          },
-          "42": {
-            "artifact_bytes": 621760,
-            "val_bpb": 0.08914528,
-            "val_loss": 0.15051787
-          },
-          "7": {
-            "artifact_bytes": 621760,
-            "val_bpb": 0.08869079,
-            "val_loss": 0.14975049
-          }
-        },
-        "track": "10min_16mb"
-      },
-      "title": "Record: Cache Is All You Need \u2014 val_bpb 0.0887, 622KB artifact (3-seed mean)",
-      "updated_at": "2026-03-27T22:53:06Z"
-    },
-    {
-      "changed_files_total": 7,
-      "changed_record_files": [
-        "records/track_10min_16mb/2026-03-27_CacheMoney_Full_6L256d/README.md",
-        "records/track_10min_16mb/2026-03-27_CacheMoney_Full_6L256d/submission.json",
-        "records/track_10min_16mb/2026-03-27_CacheMoney_Full_6L256d/train_gpt.py",
-        "records/track_10min_16mb/2026-03-27_CacheMoney_Full_6L256d/train_seed1337.log",
-        "records/track_10min_16mb/2026-03-27_CacheMoney_Full_6L256d/train_seed2024.log",
-        "records/track_10min_16mb/2026-03-27_CacheMoney_Full_6L256d/train_seed42.log"
-      ],
-      "claimed_bpb": {
-        "source": "pr_title",
-        "value": 0.0804
-      },
-      "commit_count": 24,
-      "created_at": "2026-03-27T04:51:24Z",
-      "downloaded_files": [
-        "README.md",
-        "submission.json",
-        "train_gpt.py"
-      ],
-      "eval_modes": {
-        "gptq": true,
         "sliding_window": true,
         "ttt_eval": true
       },
-      "head_ref": "cachemoney-pr",
-      "head_sha": "5d3c5757e514f2bbfd9f93a7ae61c7cc37472ef7",
-      "html_url": "https://github.com/openai/parameter-golf/pull/933",
+      "head_ref": "submission/leaky-relu-legal-ttt-1.1183",
+      "head_sha": "b08d72a96e98cac8add0543982fccd35bc8f4f4d",
+      "html_url": "https://github.com/openai/parameter-golf/pull/549",
       "hyperparameters": [
         {
           "default": "\"./data/datasets/fineweb10B_sp1024\"",
           "env": "DATA_PATH",
-          "line": 235,
+          "line": 29,
           "name": "data_path"
         },
         {
           "default": "\"./data/tokenizers/fineweb_1024_bpe.model\"",
           "env": "TOKENIZER_PATH",
-          "line": 238,
+          "line": 32,
           "name": "tokenizer_path"
         },
         {
           "default": "str(uuid.uuid4())",
           "env": "RUN_ID",
-          "line": 239,
+          "line": 33,
           "name": "run_id"
         },
         {
           "default": "1337",
           "env": "SEED",
-          "line": 240,
+          "line": 34,
           "name": "seed"
         },
         {
           "default": "524_288",
           "env": "VAL_BATCH_SIZE",
-          "line": 241,
+          "line": 35,
           "name": "val_batch_size"
-        },
-        {
-          "default": "0",
-          "env": "VAL_TOKENS_LIMIT",
-          "line": 242,
-          "name": "val_tokens_limit"
         },
         {
           "default": "4000",
           "env": "VAL_LOSS_EVERY",
-          "line": 243,
+          "line": 36,
           "name": "val_loss_every"
         },
         {
           "default": "500",
           "env": "TRAIN_LOG_EVERY",
-          "line": 244,
+          "line": 37,
           "name": "train_log_every"
         },
         {
           "default": "20000",
           "env": "ITERATIONS",
-          "line": 245,
+          "line": 38,
           "name": "iterations"
         },
         {
           "default": "3500",
           "env": "WARMDOWN_ITERS",
-          "line": 246,
+          "line": 39,
           "name": "warmdown_iters"
         },
         {
           "default": "20",
           "env": "WARMUP_STEPS",
-          "line": 247,
+          "line": 40,
           "name": "warmup_steps"
         },
         {
           "default": "786_432",
           "env": "TRAIN_BATCH_TOKENS",
-          "line": 248,
+          "line": 41,
           "name": "train_batch_tokens"
         },
         {
           "default": "2048",
           "env": "TRAIN_SEQ_LEN",
-          "line": 249,
+          "line": 42,
           "name": "train_seq_len"
         },
         {
           "default": "2048",
           "env": "EVAL_SEQ_LEN",
-          "line": 250,
+          "line": 43,
           "name": "eval_seq_len"
         },
         {
           "default": "600.0",
           "env": "MAX_WALLCLOCK_SECONDS",
-          "line": 251,
+          "line": 44,
           "name": "max_wallclock_seconds"
         },
         {
           "default": "1.5",
           "env": "QK_GAIN_INIT",
-          "line": 252,
+          "line": 45,
           "name": "qk_gain_init"
         },
         {
           "default": "1024",
           "env": "VOCAB_SIZE",
-          "line": 253,
+          "line": 46,
           "name": "vocab_size"
         },
         {
-          "default": "6",
+          "default": "11",
           "env": "NUM_LAYERS",
-          "line": 254,
+          "line": 47,
           "name": "num_layers"
         },
         {
-          "default": "2",
+          "default": "4",
           "env": "NUM_KV_HEADS",
-          "line": 255,
+          "line": 48,
           "name": "num_kv_heads"
         },
         {
-          "default": "256",
+          "default": "512",
           "env": "MODEL_DIM",
-          "line": 256,
+          "line": 49,
           "name": "model_dim"
         },
         {
-          "default": "4",
+          "default": "8",
           "env": "NUM_HEADS",
-          "line": 257,
+          "line": 50,
           "name": "num_heads"
         },
         {
-          "default": "3",
+          "default": "3.0",
           "env": "MLP_MULT",
-          "line": 258,
+          "line": 51,
           "name": "mlp_mult"
         },
         {
           "default": "\"1\"",
           "env": "TIE_EMBEDDINGS",
-          "line": 259,
+          "line": 52,
           "name": "tie_embeddings"
         },
         {
           "default": "10000.0",
           "env": "ROPE_BASE",
-          "line": 260,
+          "line": 53,
           "name": "rope_base"
         },
         {
           "default": "30.0",
           "env": "LOGIT_SOFTCAP",
-          "line": 261,
+          "line": 54,
           "name": "logit_softcap"
         },
         {
           "default": "0.6",
           "env": "EMBED_LR",
-          "line": 262,
+          "line": 55,
           "name": "embed_lr"
         },
         {
           "default": "0.008",
           "env": "HEAD_LR",
-          "line": 263,
+          "line": 56,
           "name": "head_lr"
         },
         {
           "default": "0.035",
           "env": "TIED_EMBED_LR",
-          "line": 264,
+          "line": 57,
           "name": "tied_embed_lr"
         },
         {
           "default": "0.005",
           "env": "TIED_EMBED_INIT_STD",
-          "line": 265,
+          "line": 58,
           "name": "tied_embed_init_std"
         },
         {
           "default": "0.025",
           "env": "MATRIX_LR",
-          "line": 266,
+          "line": 59,
           "name": "matrix_lr"
         },
         {
           "default": "0.025",
           "env": "SCALAR_LR",
-          "line": 267,
+          "line": 60,
           "name": "scalar_lr"
         },
         {
           "default": "0.99",
           "env": "MUON_MOMENTUM",
-          "line": 268,
+          "line": 61,
           "name": "muon_momentum"
         },
         {
           "default": "5",
           "env": "MUON_BACKEND_STEPS",
-          "line": 269,
+          "line": 62,
           "name": "muon_backend_steps"
         },
         {
           "default": "0.92",
           "env": "MUON_MOMENTUM_WARMUP_START",
-          "line": 270,
+          "line": 63,
           "name": "muon_momentum_warmup_start"
         },
         {
           "default": "1500",
           "env": "MUON_MOMENTUM_WARMUP_STEPS",
-          "line": 271,
+          "line": 64,
           "name": "muon_momentum_warmup_steps"
         },
         {
           "default": "0.9",
           "env": "BETA1",
-          "line": 272,
+          "line": 65,
           "name": "beta1"
         },
         {
           "default": "0.95",
           "env": "BETA2",
-          "line": 273,
+          "line": 66,
           "name": "beta2"
         },
         {
           "default": "1e-8",
           "env": "ADAM_EPS",
-          "line": 274,
+          "line": 67,
           "name": "adam_eps"
         },
         {
           "default": "0.3",
           "env": "GRAD_CLIP_NORM",
-          "line": 275,
+          "line": 68,
           "name": "grad_clip_norm"
         },
         {
           "default": "64",
           "env": "EVAL_STRIDE",
-          "line": 276,
+          "line": 69,
           "name": "eval_stride"
         },
         {
           "default": "0",
           "env": "MTP_NUM_HEADS",
-          "line": 277,
+          "line": 70,
           "name": "mtp_num_heads"
         },
         {
           "default": "0.2",
           "env": "MTP_LOSS_WEIGHT",
-          "line": 278,
+          "line": 71,
           "name": "mtp_loss_weight"
         },
         {
           "default": "0.95",
           "env": "MUON_BETA2",
-          "line": 279,
+          "line": 72,
           "name": "muon_beta2"
         },
         {
           "default": "\"1\"",
           "env": "SWA_ENABLED",
-          "line": 280,
+          "line": 73,
           "name": "swa_enabled"
         },
         {
           "default": "50",
           "env": "SWA_EVERY",
-          "line": 281,
+          "line": 74,
           "name": "swa_every"
         },
         {
           "default": "\"0\"",
           "env": "LAWA_ENABLED",
-          "line": 282,
+          "line": 75,
           "name": "lawa_enabled"
         },
         {
           "default": "10",
           "env": "LAWA_K",
-          "line": 283,
+          "line": 76,
           "name": "lawa_k"
         },
         {
           "default": "100",
           "env": "LAWA_FREQ",
-          "line": 284,
+          "line": 77,
           "name": "lawa_freq"
         },
         {
           "default": "0.04",
           "env": "MUON_WD",
-          "line": 285,
+          "line": 78,
           "name": "muon_wd"
         },
         {
           "default": "0.04",
           "env": "ADAM_WD",
-          "line": 286,
+          "line": 79,
           "name": "adam_wd"
         },
         {
           "default": "\"0\"",
           "env": "QAT_ENABLED",
-          "line": 287,
+          "line": 80,
           "name": "qat_enabled"
         },
         {
           "default": "2048",
           "env": "BIGRAM_VOCAB_SIZE",
-          "line": 288,
+          "line": 81,
           "name": "bigram_vocab_size"
         },
         {
           "default": "128",
           "env": "BIGRAM_DIM",
-          "line": 289,
+          "line": 82,
           "name": "bigram_dim"
         },
         {
           "default": "4",
           "env": "XSA_LAST_N",
-          "line": 290,
+          "line": 83,
           "name": "xsa_last_n"
         },
         {
           "default": "16",
           "env": "ROPE_DIMS",
-          "line": 291,
+          "line": 84,
           "name": "rope_dims"
         },
         {
           "default": "\"1\"",
           "env": "LN_SCALE",
-          "line": 292,
+          "line": 85,
           "name": "ln_scale"
         },
         {
           "default": "\"0\"",
           "env": "DTG_ENABLED",
-          "line": 293,
+          "line": 86,
           "name": "dtg_enabled"
         },
         {
           "default": "0.15",
           "env": "LATE_QAT_THRESHOLD",
-          "line": 294,
+          "line": 87,
           "name": "late_qat_threshold"
         },
         {
           "default": "\"1\"",
           "env": "VE_ENABLED",
-          "line": 295,
+          "line": 88,
           "name": "ve_enabled"
         },
         {
           "default": "128",
           "env": "VE_DIM",
-          "line": 296,
+          "line": 89,
           "name": "ve_dim"
         },
         {
           "default": "\"9,10\"",
           "env": "VE_LAYERS",
-          "line": 297,
+          "line": 90,
           "name": "ve_layers"
         },
         {
           "default": "\"0\"",
           "env": "GATED_ATTENTION",
-          "line": 298,
+          "line": 91,
           "name": "gated_attention"
         },
         {
           "default": "\"0\"",
           "env": "VALUE_RESIDUAL",
-          "line": 299,
+          "line": 92,
           "name": "value_residual"
-        },
-        {
-          "default": "\"leaky_relu_sq\"",
-          "env": "ACTIVATION_MODE",
-          "line": 300,
-          "name": "activation_mode"
-        },
-        {
-          "default": "0.5",
-          "env": "ACTIVATION_NEG_SLOPE",
-          "line": 301,
-          "name": "activation_neg_slope"
-        },
-        {
-          "default": "0.25",
-          "env": "ASYMMETRIC_SQUARE_INIT",
-          "line": 302,
-          "name": "asymmetric_square_init"
-        },
-        {
-          "default": "1.0",
-          "env": "GATED_SQUARE_BETA_INIT",
-          "line": 303,
-          "name": "gated_square_beta_init"
         },
         {
           "default": "\"0\"",
           "env": "TTT_ENABLED",
-          "line": 304,
+          "line": 93,
           "name": "ttt_enabled"
         },
         {
           "default": "0.002",
           "env": "TTT_LR",
-          "line": 305,
+          "line": 94,
           "name": "ttt_lr"
         },
         {
           "default": "3",
           "env": "TTT_EPOCHS",
-          "line": 306,
+          "line": 95,
           "name": "ttt_epochs"
         },
         {
           "default": "32768",
           "env": "TTT_CHUNK_TOKENS",
-          "line": 307,
+          "line": 96,
           "name": "ttt_chunk_tokens"
         },
         {
           "default": "2",
           "env": "TTT_FREEZE_BLOCKS",
-          "line": 308,
+          "line": 97,
           "name": "ttt_freeze_blocks"
         },
         {
           "default": "0.9",
           "env": "TTT_MOMENTUM",
-          "line": 309,
+          "line": 98,
           "name": "ttt_momentum"
         },
         {
           "default": "32",
           "env": "TTT_BATCH_SEQS",
-          "line": 310,
+          "line": 99,
           "name": "ttt_batch_seqs"
         },
         {
           "default": "1.0",
           "env": "TTT_GRAD_CLIP",
-          "line": 311,
+          "line": 100,
           "name": "ttt_grad_clip"
+        }
+      ],
+      "label": "leaky_ttt549",
+      "pr": 549,
+      "record_dir": "records/track_10min_16mb/2026-03-23_LeakyReLU_LegalTTT_ParallelMuon",
+      "state": "closed",
+      "submission": {
+        "author": "abaybektursun",
+        "blurb": "LeakyReLU(0.5)\u00b2 activation (-0.003 BPB vs relu\u00b2) + legal score-first TTT (PR #461 recipe, 3ep SGD, all blocks unfrozen) + BigramHash(1536) + Parameter Banking + Parallel Muon (PR #399). Built on PR #414 stack. 3-seed mean: 1.1194 (std 0.0006). All artifacts under 16MB, all eval under 10 min.",
+        "bytes_total": 15990006,
+        "date": "2026-03-23",
+        "github_id": "abaybektursun",
+        "name": "LeakyReLU\u00b2 + Legal Score-First TTT + Parallel Muon",
+        "val_bpb": 1.1194
+      },
+      "title": "Record: LeakyReLU\u00b2 + Legal Score-First TTT + Parallel Muon \u2014 val_bpb 1.1194 (3-seed mean)",
+      "updated_at": "2026-03-29T00:24:18Z"
+    },
+    {
+      "changed_files_total": 7,
+      "changed_record_files": [
+        "records/track_10min_16mb/2026-03-25_ValCalib_GPTQ_XSA_BigramHash3072/README.md",
+        "records/track_10min_16mb/2026-03-25_ValCalib_GPTQ_XSA_BigramHash3072/requirements.txt",
+        "records/track_10min_16mb/2026-03-25_ValCalib_GPTQ_XSA_BigramHash3072/submission.json",
+        "records/track_10min_16mb/2026-03-25_ValCalib_GPTQ_XSA_BigramHash3072/train_gpt.py",
+        "records/track_10min_16mb/2026-03-25_ValCalib_GPTQ_XSA_BigramHash3072/train_seed314.log",
+        "records/track_10min_16mb/2026-03-25_ValCalib_GPTQ_XSA_BigramHash3072/train_seed42.log",
+        "records/track_10min_16mb/2026-03-25_ValCalib_GPTQ_XSA_BigramHash3072/train_seed999.log"
+      ],
+      "claimed_bpb": {
+        "source": "pr_title",
+        "value": 1.11473
+      },
+      "commit_count": 1,
+      "created_at": "2026-03-28T13:34:01Z",
+      "downloaded_files": [
+        "README.md",
+        "requirements.txt",
+        "submission.json",
+        "train_gpt.py",
+        "train_seed314.log",
+        "train_seed42.log",
+        "train_seed999.log"
+      ],
+      "eval_modes": {
+        "gptq": true,
+        "sliding_window": true,
+        "ttt_eval": false
+      },
+      "head_ref": "record/ar-selfgen-gptq-xsa-bigramhash3072",
+      "head_sha": "d7fbe3d16f81a16e26604353bafc61d151cf5264",
+      "html_url": "https://github.com/openai/parameter-golf/pull/1019",
+      "hyperparameters": [
+        {
+          "default": "\"./data/datasets/fineweb10B_sp1024\"",
+          "env": "DATA_PATH",
+          "line": 29,
+          "name": "data_path"
         },
         {
-          "default": "\"1\"",
-          "env": "NGRAM_ENABLED",
-          "line": 313,
-          "name": "ngram_enabled"
+          "default": "\"./data/tokenizers/fineweb_1024_bpe.model\"",
+          "env": "TOKENIZER_PATH",
+          "line": 32,
+          "name": "tokenizer_path"
         },
         {
-          "default": "2",
-          "env": "NGRAM_MIN_ORDER",
-          "line": 314,
-          "name": "ngram_min_order"
+          "default": "str(uuid.uuid4())",
+          "env": "RUN_ID",
+          "line": 33,
+          "name": "run_id"
         },
         {
-          "default": "16",
-          "env": "NGRAM_MAX_ORDER",
-          "line": 315,
-          "name": "ngram_max_order"
+          "default": "1337",
+          "env": "SEED",
+          "line": 34,
+          "name": "seed"
         },
         {
-          "default": "16_777_216",
-          "env": "NGRAM_NUM_BUCKETS",
-          "line": 316,
-          "name": "ngram_num_buckets"
+          "default": "524_288",
+          "env": "VAL_BATCH_SIZE",
+          "line": 35,
+          "name": "val_batch_size"
+        },
+        {
+          "default": "4000",
+          "env": "VAL_LOSS_EVERY",
+          "line": 36,
+          "name": "val_loss_every"
+        },
+        {
+          "default": "500",
+          "env": "TRAIN_LOG_EVERY",
+          "line": 37,
+          "name": "train_log_every"
+        },
+        {
+          "default": "20000",
+          "env": "ITERATIONS",
+          "line": 38,
+          "name": "iterations"
+        },
+        {
+          "default": "3500",
+          "env": "WARMDOWN_ITERS",
+          "line": 39,
+          "name": "warmdown_iters"
+        },
+        {
+          "default": "20",
+          "env": "WARMUP_STEPS",
+          "line": 40,
+          "name": "warmup_steps"
+        },
+        {
+          "default": "786_432",
+          "env": "TRAIN_BATCH_TOKENS",
+          "line": 41,
+          "name": "train_batch_tokens"
+        },
+        {
+          "default": "2048",
+          "env": "TRAIN_SEQ_LEN",
+          "line": 42,
+          "name": "train_seq_len"
+        },
+        {
+          "default": "2048",
+          "env": "EVAL_SEQ_LEN",
+          "line": 43,
+          "name": "eval_seq_len"
+        },
+        {
+          "default": "600.0",
+          "env": "MAX_WALLCLOCK_SECONDS",
+          "line": 44,
+          "name": "max_wallclock_seconds"
+        },
+        {
+          "default": "1.5",
+          "env": "QK_GAIN_INIT",
+          "line": 45,
+          "name": "qk_gain_init"
+        },
+        {
+          "default": "1024",
+          "env": "VOCAB_SIZE",
+          "line": 46,
+          "name": "vocab_size"
+        },
+        {
+          "default": "11",
+          "env": "NUM_LAYERS",
+          "line": 47,
+          "name": "num_layers"
+        },
+        {
+          "default": "4",
+          "env": "NUM_KV_HEADS",
+          "line": 48,
+          "name": "num_kv_heads"
         },
         {
           "default": "512",
-          "env": "NGRAM_CHUNK_SIZE",
-          "line": 317,
-          "name": "ngram_chunk_size"
+          "env": "MODEL_DIM",
+          "line": 49,
+          "name": "model_dim"
         },
         {
-          "default": "0.05",
-          "env": "NGRAM_ALPHA_MIN",
-          "line": 318,
-          "name": "ngram_alpha_min"
-        },
-        {
-          "default": "0.95",
-          "env": "NGRAM_ALPHA_MAX",
-          "line": 319,
-          "name": "ngram_alpha_max"
+          "default": "8",
+          "env": "NUM_HEADS",
+          "line": 50,
+          "name": "num_heads"
         },
         {
           "default": "3.0",
-          "env": "NGRAM_ENTROPY_CENTER",
-          "line": 320,
-          "name": "ngram_entropy_center"
+          "env": "MLP_MULT",
+          "line": 51,
+          "name": "mlp_mult"
         },
         {
-          "default": "2.0",
-          "env": "NGRAM_ENTROPY_SCALE",
-          "line": 321,
-          "name": "ngram_entropy_scale"
+          "default": "\"1\"",
+          "env": "TIE_EMBEDDINGS",
+          "line": 52,
+          "name": "tie_embeddings"
         },
         {
-          "default": "1",
-          "env": "NGRAM_MIN_COUNT",
-          "line": 322,
-          "name": "ngram_min_count"
+          "default": "10000.0",
+          "env": "ROPE_BASE",
+          "line": 53,
+          "name": "rope_base"
         },
         {
-          "default": "\"two_pass\"",
-          "env": "NGRAM_MODE",
-          "line": 323,
-          "name": "ngram_mode"
+          "default": "30.0",
+          "env": "LOGIT_SOFTCAP",
+          "line": 54,
+          "name": "logit_softcap"
         },
         {
-          "default": "262144",
-          "env": "NGRAM_EVAL_CHUNK_TOKENS",
-          "line": 324,
-          "name": "ngram_eval_chunk_tokens"
+          "default": "0.6",
+          "env": "EMBED_LR",
+          "line": 55,
+          "name": "embed_lr"
+        },
+        {
+          "default": "0.008",
+          "env": "HEAD_LR",
+          "line": 56,
+          "name": "head_lr"
+        },
+        {
+          "default": "0.035",
+          "env": "TIED_EMBED_LR",
+          "line": 57,
+          "name": "tied_embed_lr"
+        },
+        {
+          "default": "0.005",
+          "env": "TIED_EMBED_INIT_STD",
+          "line": 58,
+          "name": "tied_embed_init_std"
+        },
+        {
+          "default": "0.025",
+          "env": "MATRIX_LR",
+          "line": 59,
+          "name": "matrix_lr"
+        },
+        {
+          "default": "0.025",
+          "env": "SCALAR_LR",
+          "line": 60,
+          "name": "scalar_lr"
+        },
+        {
+          "default": "0.99",
+          "env": "MUON_MOMENTUM",
+          "line": 61,
+          "name": "muon_momentum"
+        },
+        {
+          "default": "5",
+          "env": "MUON_BACKEND_STEPS",
+          "line": 62,
+          "name": "muon_backend_steps"
+        },
+        {
+          "default": "0.92",
+          "env": "MUON_MOMENTUM_WARMUP_START",
+          "line": 63,
+          "name": "muon_momentum_warmup_start"
+        },
+        {
+          "default": "1500",
+          "env": "MUON_MOMENTUM_WARMUP_STEPS",
+          "line": 64,
+          "name": "muon_momentum_warmup_steps"
+        },
+        {
+          "default": "0.9",
+          "env": "BETA1",
+          "line": 65,
+          "name": "beta1"
+        },
+        {
+          "default": "0.95",
+          "env": "BETA2",
+          "line": 66,
+          "name": "beta2"
+        },
+        {
+          "default": "1e-8",
+          "env": "ADAM_EPS",
+          "line": 67,
+          "name": "adam_eps"
+        },
+        {
+          "default": "0.3",
+          "env": "GRAD_CLIP_NORM",
+          "line": 68,
+          "name": "grad_clip_norm"
+        },
+        {
+          "default": "64",
+          "env": "EVAL_STRIDE",
+          "line": 69,
+          "name": "eval_stride"
+        },
+        {
+          "default": "0",
+          "env": "MTP_NUM_HEADS",
+          "line": 70,
+          "name": "mtp_num_heads"
+        },
+        {
+          "default": "0.2",
+          "env": "MTP_LOSS_WEIGHT",
+          "line": 71,
+          "name": "mtp_loss_weight"
+        },
+        {
+          "default": "0.95",
+          "env": "MUON_BETA2",
+          "line": 72,
+          "name": "muon_beta2"
+        },
+        {
+          "default": "\"1\"",
+          "env": "SWA_ENABLED",
+          "line": 73,
+          "name": "swa_enabled"
+        },
+        {
+          "default": "50",
+          "env": "SWA_EVERY",
+          "line": 74,
+          "name": "swa_every"
         },
         {
           "default": "\"0\"",
-          "env": "COMPLEMENT_ENABLED",
-          "line": 326,
-          "name": "complement_enabled"
+          "env": "LAWA_ENABLED",
+          "line": 75,
+          "name": "lawa_enabled"
         },
         {
-          "default": "0.5",
-          "env": "COMPLEMENT_ALPHA",
-          "line": 327,
-          "name": "complement_alpha"
+          "default": "10",
+          "env": "LAWA_K",
+          "line": 76,
+          "name": "lawa_k"
+        },
+        {
+          "default": "100",
+          "env": "LAWA_FREQ",
+          "line": 77,
+          "name": "lawa_freq"
+        },
+        {
+          "default": "0.04",
+          "env": "MUON_WD",
+          "line": 78,
+          "name": "muon_wd"
+        },
+        {
+          "default": "0.04",
+          "env": "ADAM_WD",
+          "line": 79,
+          "name": "adam_wd"
+        },
+        {
+          "default": "\"0\"",
+          "env": "QAT_ENABLED",
+          "line": 80,
+          "name": "qat_enabled"
+        },
+        {
+          "default": "2048",
+          "env": "BIGRAM_VOCAB_SIZE",
+          "line": 81,
+          "name": "bigram_vocab_size"
+        },
+        {
+          "default": "128",
+          "env": "BIGRAM_DIM",
+          "line": 82,
+          "name": "bigram_dim"
+        },
+        {
+          "default": "\"0\"",
+          "env": "TRIGRAM",
+          "line": 83,
+          "name": "trigram_enabled"
+        },
+        {
+          "default": "11",
+          "env": "XSA_LAST_N",
+          "line": 84,
+          "name": "xsa_last_n"
+        },
+        {
+          "default": "16",
+          "env": "ROPE_DIMS",
+          "line": 85,
+          "name": "rope_dims"
+        },
+        {
+          "default": "\"1\"",
+          "env": "LN_SCALE",
+          "line": 86,
+          "name": "ln_scale"
+        },
+        {
+          "default": "\"0\"",
+          "env": "DTG_ENABLED",
+          "line": 87,
+          "name": "dtg_enabled"
+        },
+        {
+          "default": "0.15",
+          "env": "LATE_QAT_THRESHOLD",
+          "line": 88,
+          "name": "late_qat_threshold"
+        },
+        {
+          "default": "\"1\"",
+          "env": "VE_ENABLED",
+          "line": 89,
+          "name": "ve_enabled"
+        },
+        {
+          "default": "128",
+          "env": "VE_DIM",
+          "line": 90,
+          "name": "ve_dim"
+        },
+        {
+          "default": "\"9,10\"",
+          "env": "VE_LAYERS",
+          "line": 91,
+          "name": "ve_layers"
+        },
+        {
+          "default": "\"0\"",
+          "env": "GATED_ATTENTION",
+          "line": 92,
+          "name": "gated_attention"
+        },
+        {
+          "default": "\"0\"",
+          "env": "VALUE_RESIDUAL",
+          "line": 93,
+          "name": "value_residual"
+        },
+        {
+          "default": "256",
+          "env": "GPTQ_CALIB_BATCHES",
+          "line": 95,
+          "name": "gptq_calib_batches"
+        },
+        {
+          "default": "128",
+          "env": "GPTQ_BLOCK_SIZE",
+          "line": 96,
+          "name": "gptq_block_size"
         }
       ],
-      "label": "cache933",
-      "pr": 933,
-      "record_dir": "records/track_10min_16mb/2026-03-27_CacheMoney_Full_6L256d",
+      "label": "gptq_xsa1019",
+      "pr": 1019,
+      "record_dir": "records/track_10min_16mb/2026-03-25_ValCalib_GPTQ_XSA_BigramHash3072",
       "state": "open",
       "submission": {
-        "author": "koltondrake",
-        "blurb": "6L/256d/4h/2kv/3x MLP (4.2M params, FP16, zero quant penalty). Two-pass full-rescore n-gram cache (orders 2-16, 16M buckets) + phrase cache (lengths 64/48/32/16, 8M buckets). Leave-one-out scoring, greedy backoff with PR 913's alpha curves, temperature sharpening (T=0.85), sequential blend. Online alpha calibration: grid search on 5% calibration set finds optimal alpha_high=0.99, entropy_thresh=3.0. No TTT. 339s eval time.",
-        "bytes_total": 7466788,
-        "date": "2026-03-27",
-        "github_id": "haikosys",
-        "name": "CacheMoney: Cache-First + Online Alpha Calibration (6L/256d FP16)",
-        "val_bpb": 0.0804
+        "artifact_bytes_max": 15984850,
+        "artifact_bytes_mean": 15908146,
+        "author": "abaybektursun",
+        "blurb": "11L XSA-all + Full Hessian GPTQ with autoregressive self-generated calibration (no val/train data accessed during quantization) + selective-pruning stack. BigramHash(3072,112), warmdown=4000, lzma preset=9. 3-seed exact mean: 1.11473509 BPB / 1.88217853 nats, beating PR549's exact 3-seed mean 1.11937967 BPB / 1.89002068 nats by 0.00784215 nats (Welch t=-11.83, df=3.31).",
+        "bytes_total": 15984850,
+        "calibration": "AR self-generated (64 seqs x 2048 tokens, temp=0.8, no external data)",
+        "comparison_baseline_pr": 549,
+        "cuda_version": "12.8",
+        "date": "2026-03-25",
+        "delta_vs_pr549_bpb": -0.00464458,
+        "delta_vs_pr549_nats": -0.00784215,
+        "flash_attn_version": "2.8.3 (FA3 Hopper kernels)",
+        "github_id": "abaybektursun",
+        "hardware": "8xH100 80GB SXM",
+        "implementation_lineage_pr": 609,
+        "name": "AR Self-Gen GPTQ + XSA-all + BigramHash 3072x112",
+        "negative_results_pr": 670,
+        "pytorch_version": "2.9.1+cu128",
+        "seed_results": {
+          "314": {
+            "artifact_bytes": 15863278,
+            "step_avg_ms": 86.6,
+            "steps": 6927,
+            "val_bpb": 1.1150812,
+            "val_loss": 1.88276292
+          },
+          "42": {
+            "artifact_bytes": 15984850,
+            "step_avg_ms": 86.7,
+            "steps": 6922,
+            "val_bpb": 1.11437394,
+            "val_loss": 1.88156874
+          },
+          "999": {
+            "artifact_bytes": 15876310,
+            "step_avg_ms": 86.8,
+            "steps": 6917,
+            "val_bpb": 1.11475014,
+            "val_loss": 1.88220393
+          }
+        },
+        "seeds": [
+          314,
+          42,
+          999
+        ],
+        "step_avg_ms_mean": 86.69,
+        "t_statistic": -11.8339,
+        "technique_summary": "AR self-gen GPTQ calibration + XSA-all + BigramHash 3072x112 + Parallel Muon + LZMA9",
+        "track": "10min_16mb",
+        "train_steps_mean": 6922.0,
+        "val_bpb": 1.11473509,
+        "val_bpb_std": 0.00035387,
+        "val_loss": 1.88217853,
+        "val_loss_std": 0.0005975,
+        "welch_df": 3.3063
       },
-      "title": "Record: CacheMoney \u2014 0.0804 BPB (3-seed mean, std 0.00003)",
-      "updated_at": "2026-03-27T04:51:24Z"
+      "title": "Record: AR Self-Gen GPTQ + XSA-all + BigramHash 3072\u00d7112 \u2014 val_bpb 1.11473 (3-seed mean)",
+      "updated_at": "2026-03-28T15:09:05Z"
     }
   ]
 }

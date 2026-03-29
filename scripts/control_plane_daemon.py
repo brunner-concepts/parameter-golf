@@ -936,10 +936,113 @@ def build_pr933_specs(generated_root: Path) -> dict[str, Path]:
     return {"smoke": smoke_path, "full": full_path}
 
 
+def build_pr549_specs(generated_root: Path) -> dict[str, Path]:
+    ensure_dirs(generated_root)
+    smoke_path = generated_root / "repro_pr549_smoke.json"
+    full_path = generated_root / "repro_pr549_full.json"
+    env = {
+        **common_spec_env(),
+        "UPSTREAM_RECORD_DIR": "third_party/upstream_prs/pr549",
+        "RUN_ENTRYPOINT": "train_gpt.py",
+    }
+    smoke_spec = {
+        "schema_version": 1,
+        "run_id": "repro_pr549_smoke",
+        "hypothesis": "Validate the accepted PR #549 neural stack (LeakyReLU^2 + legal TTT + Parallel Muon) on 1x H100 before spending on the full 8x reproduction.",
+        "parent_branch": "repro/pr549",
+        "track": "neural",
+        "compute_tier": "1xH100-smoke",
+        "auto_promote": False,
+        "promotion_gate": "Smoke must complete cleanly before the daemon may spend on the full 8x H100 SXM PR #549 reproduction.",
+        "env": env,
+        "phases": [
+            {
+                "id": "bootstrap_env",
+                "description": "Prepare the repo, virtualenv, zstandard, and flash_attn_interface.",
+                "command": "bash scripts/bootstrap_runpod_env.sh",
+                "cwd": "${REPO_DIR}",
+                "log_name": "bootstrap_env.log",
+                "failure_summary": "Fix bootstrap before attempting the PR #549 smoke run.",
+            },
+            {
+                "id": "prepare_data",
+                "description": "Download one training shard for a cheap smoke validation.",
+                "command": "bash scripts/prepare_parameter_golf_data.sh",
+                "cwd": "${REPO_DIR}",
+                "log_name": "prepare_data.log",
+                "env": {"TRAIN_SHARDS": "1"},
+                "failure_summary": "Fix the data path before retrying the PR #549 smoke run.",
+            },
+            {
+                "id": "run_smoke",
+                "description": "Run the upstream PR #549 train_gpt.py on 1 GPU with a short wallclock budget.",
+                "command": "bash scripts/run_upstream_record.sh",
+                "cwd": "${REPO_DIR}",
+                "log_name": "pr549_smoke.log",
+                "env": {
+                    "RUN_ID": "pr549_smoke",
+                    "NPROC_PER_NODE": "1",
+                    "MAX_WALLCLOCK_SECONDS": "120",
+                },
+                "failure_summary": "Fix the smoke failure before allowing the full 8x PR #549 reproduction.",
+            },
+        ],
+        "success_summary": "PR #549 smoke completed. Review infrastructure health before allowing the full 8x run.",
+        "manual_next_command": "Launch repro_pr549_full if smoke is clean.",
+    }
+    full_spec = {
+        "schema_version": 1,
+        "run_id": "repro_pr549_full",
+        "hypothesis": "Reproduce the accepted PR #549 SOTA (1.1194 BPB) on 8x H100 SXM to establish a verified delta anchor for improvement experiments.",
+        "parent_branch": "repro/pr549",
+        "track": "neural",
+        "compute_tier": "8xH100-SXM",
+        "auto_promote": False,
+        "promotion_gate": "Full repro must land within +/-0.001 BPB of 1.1194 before any improvement experiments are allowed.",
+        "env": env,
+        "phases": [
+            {
+                "id": "bootstrap_env",
+                "description": "Prepare the repo, virtualenv, zstandard, and flash_attn_interface on the 8x pod.",
+                "command": "bash scripts/bootstrap_runpod_env.sh",
+                "cwd": "${REPO_DIR}",
+                "log_name": "bootstrap_env.log",
+                "failure_summary": "Fix the bootstrap path before retrying the full PR #549 reproduction.",
+            },
+            {
+                "id": "prepare_data",
+                "description": "Download the full sp1024 dataset cache before the 8x reproduction.",
+                "command": "bash scripts/prepare_parameter_golf_data.sh",
+                "cwd": "${REPO_DIR}",
+                "log_name": "prepare_data.log",
+                "failure_summary": "Fix the data bootstrap issue before retrying the full PR #549 run.",
+            },
+            {
+                "id": "run_full_repro",
+                "description": "Run the published PR #549 record path on 8 GPUs.",
+                "command": "bash scripts/run_upstream_record.sh",
+                "cwd": "${REPO_DIR}",
+                "log_name": "pr549_full.log",
+                "env": {
+                    "RUN_ID": "pr549_full",
+                    "NPROC_PER_NODE": "8",
+                },
+                "failure_summary": "Investigate the exact PR #549 repro failure before trying improvement experiments.",
+            },
+        ],
+        "success_summary": "PR #549 full repro completed. Capture BPB, runtime, and artifact size in 09_RESULTS. This is the delta anchor for all improvement experiments.",
+        "manual_next_command": "Write 09_RESULTS/repro_pr549_full.md, then decide which improvement experiments to run.",
+    }
+    atomic_write_json(smoke_path, smoke_spec)
+    atomic_write_json(full_path, full_spec)
+    return {"smoke": smoke_path, "full": full_path}
+
+
 def generate_specs(control_root: Path) -> dict[str, dict[str, Path]]:
     generated_root = control_root / "generated_specs"
     ensure_dirs(generated_root)
     return {
+        "549": build_pr549_specs(generated_root),
         "868": build_pr868_specs(generated_root),
         "933": build_pr933_specs(generated_root),
     }
@@ -987,61 +1090,97 @@ def evaluate_queue(
         queue_state["blocked_reason"] = "runpod_pod_active"
         return queue_state
 
-    smoke = live_run_snapshot(live_root, "repro_pr868_smoke")
-    full = live_run_snapshot(live_root, "repro_pr868_full")
-    parity_full = live_run_snapshot(live_root, "repro_pr868_parity_full")
-    smoke_terminal = smoke.get("terminal_result", {}).get("status")
-    full_terminal = full.get("terminal_result", {}).get("status")
-    parity_terminal = parity_full.get("terminal_result", {}).get("status")
-    stale_supervisor_timeout = int(policy.get("stale_supervisor_state_timeout_seconds", 180))
-    smoke_supervisor_state = smoke.get("supervisor_state", {})
-    full_supervisor_state = full.get("supervisor_state", {})
-    parity_supervisor_state = parity_full.get("supervisor_state", {})
+    approved_family = set(policy.get("autonomy", {}).get("approved_target_family", []))
 
-    if supervisor_state_is_fresh(smoke_supervisor_state, stale_supervisor_timeout) or supervisor_state_is_fresh(
-        full_supervisor_state, stale_supervisor_timeout
-    ) or supervisor_state_is_fresh(
-        parity_supervisor_state, stale_supervisor_timeout
-    ):
-        queue_state["blocked"] = True
-        queue_state["blocked_reason"] = "orphaned_supervisor_state_manual_review"
-        return queue_state
-    if smoke_terminal == "failed":
-        queue_state["blocked"] = True
-        queue_state["blocked_reason"] = "pr868_smoke_failed_manual_review"
-        return queue_state
-    if full_terminal == "failed":
-        queue_state["blocked"] = True
-        queue_state["blocked_reason"] = "pr868_full_failed_manual_review"
-        return queue_state
-    if parity_terminal == "failed":
-        queue_state["blocked"] = True
-        queue_state["blocked_reason"] = "pr868_parity_full_failed_manual_review"
-        return queue_state
-    if parity_terminal in {"complete", "dry-run-complete"}:
-        queue_state["blocked"] = True
-        queue_state["blocked_reason"] = "pr868_parity_full_complete_review"
-        return queue_state
+    # --- PR #549 neural pipeline ---
+    if 549 in approved_family and "549" in generated_specs:
+        smoke_549 = live_run_snapshot(live_root, "repro_pr549_smoke")
+        full_549 = live_run_snapshot(live_root, "repro_pr549_full")
+        smoke_549_terminal = smoke_549.get("terminal_result", {}).get("status")
+        full_549_terminal = full_549.get("terminal_result", {}).get("status")
+        if smoke_549_terminal == "failed":
+            queue_state["blocked"] = True
+            queue_state["blocked_reason"] = "pr549_smoke_failed_manual_review"
+            return queue_state
+        if full_549_terminal == "failed":
+            queue_state["blocked"] = True
+            queue_state["blocked_reason"] = "pr549_full_failed_manual_review"
+            return queue_state
+        if full_549_terminal in {"complete", "dry-run-complete"}:
+            queue_state["blocked"] = True
+            queue_state["blocked_reason"] = "pr549_full_complete_review"
+            return queue_state
+        if smoke_549_terminal not in {"complete", "dry-run-complete"}:
+            next_spec = generated_specs["549"]["smoke"]
+            next_run_id = "repro_pr549_smoke"
+            next_target_pr = 549
+        else:
+            next_spec = generated_specs["549"]["full"]
+            next_run_id = "repro_pr549_full"
+            next_target_pr = 549
 
-    manifest_path, surface_path = pr868_surface_paths()
-    parity_ready = manifest_path.exists() and surface_path.exists()
-    queue_state["parity_surface_ready"] = parity_ready
-    queue_state["parity_manifest_path"] = str(manifest_path)
-    queue_state["parity_surface_path"] = str(surface_path)
+    # --- PR #868 cache pipeline (legacy, only if still approved) ---
+    elif 868 in approved_family and "868" in generated_specs:
+        smoke = live_run_snapshot(live_root, "repro_pr868_smoke")
+        full = live_run_snapshot(live_root, "repro_pr868_full")
+        parity_full = live_run_snapshot(live_root, "repro_pr868_parity_full")
+        smoke_terminal = smoke.get("terminal_result", {}).get("status")
+        full_terminal = full.get("terminal_result", {}).get("status")
+        parity_terminal = parity_full.get("terminal_result", {}).get("status")
+        stale_supervisor_timeout = int(policy.get("stale_supervisor_state_timeout_seconds", 180))
+        smoke_supervisor_state = smoke.get("supervisor_state", {})
+        full_supervisor_state = full.get("supervisor_state", {})
+        parity_supervisor_state = parity_full.get("supervisor_state", {})
 
-    if smoke_terminal not in {"complete", "dry-run-complete"}:
-        next_spec = generated_specs["868"]["smoke"]
-        next_run_id = "repro_pr868_smoke"
-    elif full_terminal not in {"complete", "dry-run-complete"}:
-        next_spec = generated_specs["868"]["full"]
-        next_run_id = "repro_pr868_full"
-    elif not parity_ready:
-        queue_state["blocked"] = True
-        queue_state["blocked_reason"] = "pr868_parity_prep_required"
-        return queue_state
+        if supervisor_state_is_fresh(smoke_supervisor_state, stale_supervisor_timeout) or supervisor_state_is_fresh(
+            full_supervisor_state, stale_supervisor_timeout
+        ) or supervisor_state_is_fresh(
+            parity_supervisor_state, stale_supervisor_timeout
+        ):
+            queue_state["blocked"] = True
+            queue_state["blocked_reason"] = "orphaned_supervisor_state_manual_review"
+            return queue_state
+        if smoke_terminal == "failed":
+            queue_state["blocked"] = True
+            queue_state["blocked_reason"] = "pr868_smoke_failed_manual_review"
+            return queue_state
+        if full_terminal == "failed":
+            queue_state["blocked"] = True
+            queue_state["blocked_reason"] = "pr868_full_failed_manual_review"
+            return queue_state
+        if parity_terminal == "failed":
+            queue_state["blocked"] = True
+            queue_state["blocked_reason"] = "pr868_parity_full_failed_manual_review"
+            return queue_state
+        if parity_terminal in {"complete", "dry-run-complete"}:
+            queue_state["blocked"] = True
+            queue_state["blocked_reason"] = "pr868_parity_full_complete_review"
+            return queue_state
+
+        manifest_path, surface_path = pr868_surface_paths()
+        parity_ready = manifest_path.exists() and surface_path.exists()
+        queue_state["parity_surface_ready"] = parity_ready
+        queue_state["parity_manifest_path"] = str(manifest_path)
+        queue_state["parity_surface_path"] = str(surface_path)
+
+        if smoke_terminal not in {"complete", "dry-run-complete"}:
+            next_spec = generated_specs["868"]["smoke"]
+            next_run_id = "repro_pr868_smoke"
+        elif full_terminal not in {"complete", "dry-run-complete"}:
+            next_spec = generated_specs["868"]["full"]
+            next_run_id = "repro_pr868_full"
+        elif not parity_ready:
+            queue_state["blocked"] = True
+            queue_state["blocked_reason"] = "pr868_parity_prep_required"
+            return queue_state
+        else:
+            next_spec = generated_specs["868"]["parity_full"]
+            next_run_id = "repro_pr868_parity_full"
+        next_target_pr = 868
     else:
-        next_spec = generated_specs["868"]["parity_full"]
-        next_run_id = "repro_pr868_parity_full"
+        queue_state["blocked"] = True
+        queue_state["blocked_reason"] = "no_approved_target_with_specs"
+        return queue_state
 
     campaign_enabled = bool(spend_campaign.get("enabled", False))
     campaign_allowed_run_ids = set(spend_campaign.get("allowed_run_ids") or [])
@@ -1097,7 +1236,7 @@ def evaluate_queue(
         {
             "next_spec": str(next_spec),
             "next_run_id": next_run_id,
-            "next_target_pr": 868,
+            "next_target_pr": next_target_pr,
             "next_compute_tier": tier,
             "required_reserve_usd": round(reserve_usd, 4),
         }
@@ -1330,17 +1469,19 @@ def executive_diagnosis(
         )
     if queue_state.get("blocked") and queue_state.get("blocked_reason") == "campaign_waiting_for_activation":
         activation_time = ((queue_state.get("campaign") or {}).get("activation_time") or "the next campaign window")
+        campaign_id = (queue_state.get("campaign") or {}).get("id") or "current"
         return (
             "campaign_waiting_for_activation",
-            "The next PR #868 spend campaign is armed, but it is waiting for the post-cap reset launch window.",
-            f"Do not launch new GPU work before {activation_time}; the next allowed run is the pinned-manifest PR #868 parity rerun.",
+            f"The {campaign_id} campaign is armed, but it is waiting for the activation window.",
+            f"Do not launch new GPU work before {activation_time}.",
         )
     if queue_state.get("blocked") and queue_state.get("blocked_reason") == "campaign_budget_exhausted":
         campaign = queue_state.get("campaign") or {}
+        campaign_id = campaign.get("id") or "current"
         return (
             "campaign_budget_exhausted",
-            "The bounded PR #868 parity campaign has spent its final self-funded envelope.",
-            f"Stop launching new compute, preserve the current evidence, and move to the next grant request. Additional spend used: ${float(campaign.get('additional_spend_used_usd', 0.0)):.2f}.",
+            f"The {campaign_id} campaign has spent its compute envelope.",
+            f"Stop launching new compute, preserve the current evidence, and decide whether to request additional credits. Additional spend used: ${float(campaign.get('additional_spend_used_usd', 0.0)):.2f}.",
         )
     if queue_state.get("blocked") and queue_state.get("blocked_reason") == "pr868_parity_prep_required":
         return (

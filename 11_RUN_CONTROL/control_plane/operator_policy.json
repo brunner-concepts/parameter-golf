@@ -18,9 +18,8 @@
   "autonomy": {
     "mode": "aggressive_auto",
     "approved_target_family": [
-      868,
-      913,
-      933
+      549,
+      1019
     ],
     "allow_provider_storage": true,
     "allow_topology_pivots": true
@@ -36,41 +35,29 @@
     "issue_number": 140,
     "tracked_prs": [
       549,
-      868,
-      913,
-      933
+      1019
     ]
   },
   "targets": {
-    "868": {
-      "label": "budgeted_twopass_ngram",
+    "549": {
+      "label": "leaky_ttt_muon",
       "priority": 1,
-      "acceptance_safety": 0.95,
+      "acceptance_safety": 1.0,
       "reproducibility": 0.95,
-      "cost_inverse": 0.62,
-      "legality_risk": "low",
+      "cost_inverse": 0.7,
+      "legality_risk": "none",
       "auto_run": true,
-      "notes": "Conservative stepping-stone cache path with explicit legal score-first framing."
+      "notes": "Accepted official SOTA. LeakyReLU(0.5)^2 + legal score-first TTT + Parallel Muon. Reproduction anchor."
     },
-    "933": {
-      "label": "cachemoney",
+    "1019": {
+      "label": "gptq_xsa_bigram",
       "priority": 2,
-      "acceptance_safety": 0.45,
+      "acceptance_safety": 0.85,
       "reproducibility": 0.9,
-      "cost_inverse": 0.85,
-      "legality_risk": "high",
+      "cost_inverse": 0.75,
+      "legality_risk": "low",
       "auto_run": false,
-      "notes": "Strongest live cache route, but two-pass legality is explicitly under active discussion."
-    },
-    "913": {
-      "label": "cache_is_all_you_need",
-      "priority": 3,
-      "acceptance_safety": 0.6,
-      "reproducibility": 0.88,
-      "cost_inverse": 0.93,
-      "legality_risk": "medium",
-      "auto_run": false,
-      "notes": "Important lineage target and cleaner code surface for phrase-cache blending."
+      "notes": "AR self-gen Full Hessian GPTQ + XSA-all + BigramHash 3072x112. Dropped TTT. Likely next merge."
     }
   },
   "smoke_gpu_id": "NVIDIA H100 80GB HBM3",
